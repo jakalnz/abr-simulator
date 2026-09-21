@@ -1,0 +1,6 @@
+# Reference material: real patient printouts (names) and copyrighted papers/protocols - never commit
+ABR Images/
+Protocols and Norms/
+# local tooling
+node_modules/
+.claude/settings.local.json

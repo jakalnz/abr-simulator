@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "abr-simulator", "runtimeExecutable": "npx", "runtimeArgs": ["http-server", "-p", "8232", "-c-1"], "port": 8232 }
+  ]
+}

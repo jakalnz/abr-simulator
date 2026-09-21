@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABR Simulator</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="titlebar"><span id="ttl">ABR Simulator</span><span id="caseName"></span></div>
+<div id="toolbar">
+  <label>Protocol
+    <select id="protocol">
+      <option value="0">Click</option>
+      <option value="500">Tone burst 0.5 kHz</option>
+      <option value="1000">Tone burst 1 kHz</option>
+      <option value="2000">Tone burst 2 kHz</option>
+      <option value="4000">Tone burst 4 kHz</option>
+    </select>
+  </label>
+  <button id="btnPatient">Patient / case&hellip;</button>
+  <button id="btnShare">Copy share link</button>
+  <button id="btnReport">Report&hellip;</button>
+  <span class="sp"></span>
+  <span id="sessionTxt">Current session</span>
+</div>
+
+<div id="main">
+  <aside id="left">
+    <div class="tabs"><button class="tab on" data-tab="record">Record</button><button class="tab" data-tab="edit">Edit</button><button class="tab" data-tab="latency">Latency</button></div>
+
+    <div class="tabpane" id="tab-record">
+      <div class="box">
+        <div class="row"><span>Stimulus</span><select id="stType"><option value="0">Click</option><option value="500">TB 0.5 kHz</option><option value="1000">TB 1 kHz</option><option value="2000">TB 2 kHz</option><option value="4000">TB 4 kHz</option></select></div>
+        <div class="row"><span>Level (dB nHL)</span><span><button id="lvlDn">&minus;</button> <input id="level" type="number" step="5" value="80"> <button id="lvlUp">+</button></span></div>
+        <div class="row"><span>Stim.</span>
+          <span class="radios"><label><input type="radio" name="ear" value="0" checked> Right</label> <label><input type="radio" name="ear" value="1"> Left</label></span></div>
+        <div class="row"><span>Transducer</span><select id="trans"><option value="insert">Insert phone</option><option value="bone">Bone conductor</option></select></div>
+        <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
+        <div class="row"><span>Rate (/s)</span><select id="rate"></select></div>
+        <div class="row"><span>Averages</span><select id="nmax"></select></div>
+        <div class="row"><span>Reject (&plusmn;&micro;V)</span><select id="reject"><option>10</option><option>20</option><option selected>40</option><option>80</option></select></div>
+        <div class="row"><span>HPF / LPF (Hz)</span><span><select id="hpf"><option>30</option><option selected>100</option><option>150</option></select> <select id="lpf"><option>1500</option><option selected>3000</option></select></span></div>
+        <div class="row"><span>Speed</span><select id="speed"><option value="10">10&times;</option><option value="30">30&times;</option><option value="100" selected>100&times;</option><option value="400">400&times;</option></select></div>
+      </div>
+      <div class="box"><div class="lbl">Man. Stim. levels</div><div id="lvlGrid"></div><div class="hint" id="lvlHint"></div></div>
+      <div class="box status">
+        <div class="lbl">Status</div>
+        <div>Recorded <b id="stRec">0</b> &nbsp; Rejected <b id="stRej">0%</b></div>
+        <div>Wave reproducibility <b id="stRep">0%</b></div>
+        <div class="bar"><div id="repBar"></div></div>
+      </div>
+      <div class="btns"><button id="btnStart" class="big go">Start</button><button id="btnPause" class="big">Pause</button></div>
+      <div class="hint">Ipsilateral and contralateral channels are recorded together. Right-click a trace for options.</div>
+    </div>
+
+    <div class="tabpane" id="tab-edit" hidden>
+      <div class="box">
+        <label class="row"><span>Channels shown</span><select id="chanSel"><option value="ipsi">Ipsilateral</option><option value="both">Ipsi + Contra</option></select></label>
+        <label class="row"><span>Show A / B splits</span><input type="checkbox" id="showAB" checked></label>
+        <div class="row"><span>Scale</span><span><button id="zoomDn">&#9660;</button> <button id="zoomUp">&#9650;</button></span></div>
+      </div>
+      <div class="box"><div class="lbl">Curves</div><div id="traceList"></div></div>
+      <div class="btns"><button id="btnDel">Delete selected</button><button id="btnClear">Clear all</button></div>
+      <div class="btns"><button id="btnResetPos">Reset curve positions</button><button id="btnUnmerge">Unmerge selected</button></div>
+      <div class="hint">Select a curve, then right-click another curve (same ear) to merge (weighted average, replaces the originals; can be unmerged) or add (same average, originals stay visible).</div>
+      <div class="hint">Drag a curve's tag (left of the graph) up or down to reposition it; double-click the tag to reset.</div>
+    </div>
+
+    <div class="tabpane" id="tab-latency" hidden>
+      <div class="box">
+        <div class="lbl">Wave to mark (click on the selected curve)</div>
+        <div id="waveBtns"></div>
+        <div class="btns"><button id="btnClrMarks">Clear marks on selected</button></div>
+        <div class="hint">Select a curve by clicking it. The marker snaps to the nearest peak.</div>
+      </div>
+    </div>
+  </aside>
+
+  <section id="right">
+    <div id="strip">
+      <div class="conf"><span class="k">Response confidence</span> <b id="confV">--</b><span id="confTick"></span></div>
+      <div class="stat">Fmp <b id="fmpV">--</b></div>
+      <div class="stat">Recorded <b id="recV">0</b></div>
+      <div class="stat">Residual noise <b id="rnV">--</b></div>
+      <div id="prog"><div id="progFill"></div></div>
+      <canvas id="eeg" width="220" height="44"></canvas>
+    </div>
+    <div id="graphs">
+      <div class="pane"><div class="ptitle r">Right ear</div><canvas id="cv0"></canvas></div>
+      <div class="pane"><div class="ptitle l">Left ear</div><canvas id="cv1"></canvas></div>
+    </div>
+    <div id="lat"></div>
+  </section>
+</div>
+
+<div id="ctx" hidden></div>
+<div id="toast" hidden></div>
+
+<!-- Patient modal -->
+<div class="modal" id="mPatient" hidden><div class="mbox">
+  <h2>Patient / case</h2>
+  <div class="lockbar"><span class="admin-off">Instructor:</span> <input id="pPw" type="password" placeholder="password" autocomplete="off"> <button id="pUnlock">Unlock</button> <span id="pLockMsg" class="err"></span><button id="pRelock" class="admin">Lock</button></div>
+  <div class="grid2">
+    <label class="admin">Preset case <select id="pPreset"></select></label>
+    <label>Name <input id="pName" maxlength="60"></label>
+    <label>Patient <select id="pAge"><option value="adult">Adult</option><option value="child">Child / infant</option></select></label>
+    <label>Age (months) <input id="pMonths" type="number" min="0" max="63" step="1"></label>
+    <label>State <select id="pState"><option value="quiet">Quiet, asleep / relaxed</option><option value="noisy">Noisy, awake / restless</option></select></label>
+  </div>
+  <h3>Hearing thresholds (dB HL)</h3>
+  <table id="pAud"><thead><tr><th></th><th>0.5k</th><th>1k</th><th>2k</th><th>4k</th></tr></thead><tbody></tbody></table>
+  <details id="pAns" class="admin"><summary>Case answers: pathology, latencies, cochlear microphonic</summary>
+    <div id="pPath"></div>
+  </details>
+  <div class="btns"><button id="pApply" class="go admin">Apply</button><button id="pCopy" class="admin">Copy share link</button><button id="pClose">Close</button></div>
+  <div class="hint" id="pHint"></div>
+</div></div>
+
+<!-- Report modal -->
+<div class="modal" id="mReport" hidden><div class="mbox wide" id="reportBox">
+  <div class="noprint btns"><button id="rPrint" class="go">Print / Save PDF</button><button id="rClose">Close</button></div>
+  <div id="reportBody"></div>
+</div></div>
+
+<script src="js/model.js"></script>
+<script src="js/codec.js"></script>
+<script src="js/defaultPatients.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
