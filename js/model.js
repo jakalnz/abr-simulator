@@ -498,7 +498,8 @@
       let pw = 0; const b1 = Math.round((tb + 2 - W0) / DT);
       for (let i = a0; i < b1; i++) pw += this.clean.ipsi[i] * this.clean.ipsi[i];
       pw /= (b1 - a0);
-      out.fmp = rnU > 0 ? (pw + rnU * rnU) / (rnU * rnU) * (0.9 + 0.2 * Math.random()) : 0;
+      const rnE = Math.max(rnU, 1e-4);            // noise-free (0%) recordings: Fmp saturates instead of dividing by zero
+      out.fmp = this.n > 0 ? (pw + rnE * rnE) / (rnE * rnE) * (0.9 + 0.2 * Math.random()) : 0;
       out.conf = clamp(1 - Math.exp(-2.2 * Math.max(0, out.fmp - 1)), 0, 0.999) * 100;
       return out;
     }

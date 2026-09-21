@@ -13,6 +13,7 @@
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
     reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.8,
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
+    pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
     tab: 'record', wave: 'V', nextId: 1
   };
@@ -68,7 +69,7 @@
   function readUI() {
     S.type = +$('stType').value; S.level = +$('level').value || 0; S.trans = $('trans').value; S.pol = $('pol').value;
     S.rate = +$('rate').value; S.nmax = +$('nmax').value; S.reject = +$('reject').value;
-    S.noise = +$('noise').value || 1; S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
+    S.noise = parseFloat($('noise').value); if (!isFinite(S.noise)) S.noise = 1; S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
     S.ear = +document.querySelector('input[name=ear]:checked').value;
     clampLevel();
   }
@@ -111,6 +112,21 @@
     }
     S.acq = null; S.live = null; S.paused = false;
     setButtons(); render(); renderList();
+  }
+  /* Recording pages 1-9: each page holds its own set of curves; the app always works on S.traces / S.sel of the current page. */
+  function switchPage(n) {
+    if (n === S.page) return;
+    if (S.acq) { toast('Stop the recording before changing page'); return; }
+    S.pages[S.page].traces = S.traces; S.pages[S.page].sel = S.sel;
+    S.page = n; S.traces = S.pages[n].traces; S.sel = S.pages[n].sel;
+    $('ctx').hidden = true; renderList(); render();
+  }
+  function renderPages() {
+    [...$('pageBtns').children].forEach((b, i) => {
+      const traces = i === S.page ? S.traces : S.pages[i].traces;
+      b.classList.toggle('on', i === S.page); b.classList.toggle('has', traces.length > 0);
+      b.title = 'Page ' + (i + 1) + (traces.length ? ' (' + traces.length + ' curve' + (traces.length > 1 ? 's' : '') + ')' : ' (empty)');
+    });
   }
   function setButtons() {
     const b = $('btnStart');
@@ -216,7 +232,7 @@
     if (!items.length) { ctx.fillStyle = '#888'; ctx.fillText('No curves recorded for this ear', L_MARGIN + 10, T_MARGIN + 24); }
   }
   function render() {
-    draw($('cv0'), 0); draw($('cv1'), 1);
+    draw($('cv0'), 0); draw($('cv1'), 1); renderPages();
     const t = S.live || S.sel;
     $('confV').textContent = t && t.n ? t.conf.toFixed(1) + '%' : '--';
     $('confV').className = t && t.conf >= 99 ? 'ok' : '';
@@ -350,7 +366,7 @@
     const NWc = a.ch[0].avg.length;
     const mix = (x, y) => { const o = new Float64Array(NWc); for (let i = 0; i < NWc; i++) o[i] = wa * x[i] + wb * y[i]; return o; };
     const ch = [0, 1].map((k) => ({ avg: mix(a.ch[k].avg, b.ch[k].avg), A: mix(a.ch[k].A, b.ch[k].A), B: mix(a.ch[k].B, b.ch[k].B) }));
-    const rn = 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
+    const rn = a.rn > 0 && b.rn > 0 ? 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn)) : 0;
     // reproducibility of the new A/B split (1-10 ms) and an Fmp-like statistic from the combined average
     let ta = 1, tb = 10;
     if (NWc > M.NW) {                     // tone burst: statistics around the wave V-V' peak of the combined average
@@ -365,7 +381,7 @@
     let sab = 0, saa = 0, sbb = 0;
     for (let i = i0; i < i1; i++) { const x = ch[0].A[i] - ma, y = ch[0].B[i] - mb; sab += x * y; saa += x * x; sbb += y * y; }
     let pw = 0; for (let i = i0; i < i2; i++) pw += ch[0].avg[i] * ch[0].avg[i]; pw /= (i2 - i0);
-    const rnU = rn / 1000, fmp = (pw + rnU * rnU) / (rnU * rnU);
+    const rnU = Math.max(rn / 1000, 1e-4), fmp = (pw + rnU * rnU) / (rnU * rnU);
     S.mergeCount = (S.mergeCount || 0) + 1;
     const t = {
       id: S.nextId++, base: a.base, ear: a.ear, stim: a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
@@ -445,7 +461,7 @@
   function setPatient(p) {
     if (S.acq) stop();
     S.patient = M.newPatient(JSON.parse(JSON.stringify(p)));
-    S.traces = []; S.sel = null; S.live = null;
+    S.pages.forEach((p) => { p.traces = []; p.sel = null; }); S.traces = S.pages[S.page].traces; S.sel = null; S.live = null;
     syncUI(); renderList(); render();
   }
   const ADMIN_PW = '1234';
@@ -481,7 +497,7 @@
   /* ---------- report ---------- */
   function openReport() {
     const rows = S.traces.filter((t) => !t.hidden);
-    let h = `<div class="rep-head"><div><h2>ABR report</h2><div>${S.patient.name} &mdash; ${S.patient.adult ? 'Adult' : 'Child ' + S.patient.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
+    let h = `<div class="rep-head"><div><h2>ABR report &mdash; page ${S.page + 1}</h2><div>${S.patient.name} &mdash; ${S.patient.adult ? 'Adult' : 'Child ' + S.patient.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
       <div class="rep-graphs"><canvas id="rc0"></canvas><canvas id="rc1"></canvas></div><h3>Recordings</h3>
       <table><tr><th>Curve</th><th>Stimulus</th><th>Transducer</th><th>Recorded / rejected</th><th>Wave repro</th><th>Rate</th><th>Polarity</th><th>HPF / LPF</th><th>RN</th></tr>`;
     for (const t of rows) h += `<tr><td>${t.label}</td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}</td><td>${t.n} / ${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.stim.rate}</td><td>${{ rare: 'Raref.', cond: 'Cond.', alt: 'Alter.' }[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td><td>${t.rn.toFixed(0)} nV</td></tr>`;
@@ -523,6 +539,7 @@
     $('btnClear').onclick = () => { S.traces = []; S.sel = null; renderList(); render(); };
     $('btnClrMarks').onclick = () => { if (S.sel) { S.sel.marks = {}; render(); } };
     $('btnUnmerge').onclick = () => { if (S.sel && S.sel.parts) { unmerge(S.sel); renderList(); render(); } else toast('Select a merged curve first'); };
+    for (let i = 0; i < 9; i++) { const b = document.createElement('button'); b.textContent = i + 1; b.onclick = () => switchPage(i); $('pageBtns').appendChild(b); }
     $('btnResetPos').onclick = () => { S.traces.forEach((t) => (t.dy = [0, 0])); render(); };
     [0, 1].forEach((e) => { bindDrag($('cv' + e), e); });
     [0, 1].forEach((e) => { const cv = $('cv' + e); cv.onclick = (ev) => onClick(cv, e, ev); cv.oncontextmenu = (ev) => onContext(cv, e, ev); });
