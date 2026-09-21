@@ -60,10 +60,10 @@ window around the modelled wave V for tone bursts (Fmp is evaluated near wave V)
 ## Patients and share links
 `patient = {name, adult, ageMonths, noisy, noise, ears:[{ac[4], bc[4], path 0|1|2, sev 0-3, cm 0-3, latI, latIII, latV}]}`
 (thresholds dB HL at 0.5/1/2/4 kHz; `path` 1 = retrocochlear, 2 = neuropathy/ANSD; latencies are optional manual
-overrides at 80 dB nHL, 17.1/s; `noise` = EEG-noise multiplier, default 0.2, one of `NOISE_LEVELS` in `codec.js`, edited in the
+overrides at 80 dB nHL, 17.1/s; `noise` = EEG-noise multiplier, default 0.3, one of `NOISE_LEVELS` in `codec.js`, edited in the
 Patient / case dialog (instructor only) and carried in the share link). The codec packs this into ~65–90 chars (Word
 hyperlinks break above 255). Bump `VERSION` in `codec.js` if the packed layout changes and keep decoding old versions
-(v1 links, which have no noise field, still decode and get 20%).
+(v1 links, which have no noise field, still decode and get 30%).
 
 The instructor gate (password `1234`, `ADMIN_PW` in `app.js`) hides case answers and editing from students. It is
 client-side only — anyone can read the source — so treat it as a classroom convenience, not security.

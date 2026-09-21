@@ -3,7 +3,7 @@
  */
 (function (root) {
   'use strict';
-  const VERSION = 2;                     // v2 adds the EEG-noise level; v1 links still decode (noise 20%)
+  const VERSION = 2;                     // v2 adds the EEG-noise level; v1 links still decode (noise 30%)
   const NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1, 1.5, 2];
 
   class BitWriter {
@@ -28,7 +28,7 @@
     w.write(p.adult ? 1 : 0, 1);
     w.write(p.ageMonths, 6);
     w.write(p.noisy ? 1 : 0, 1);
-    w.write(Math.max(0, NOISE_LEVELS.indexOf(p.noise == null ? 0.2 : p.noise)), 4);
+    w.write(Math.max(0, NOISE_LEVELS.indexOf(p.noise == null ? 0.3 : p.noise)), 4);
     for (const e of p.ears) {
       for (const v of e.ac) w.write(v / 5 + 1, 5);          // -5..150 dB HL in 5 dB steps
       for (const v of e.bc) w.write(v / 5 + 1, 5);
@@ -47,8 +47,8 @@
     const r = new BitReader(bytes);
     const ver = r.read(4);
     if (ver !== 1 && ver !== 2) throw new Error('Unsupported case version');
-    const p = { adult: !!r.read(1), ageMonths: r.read(6), noisy: !!r.read(1), noise: 0.2, ears: [] };
-    if (ver >= 2) { const ni = r.read(4); p.noise = NOISE_LEVELS[ni] == null ? 0.2 : NOISE_LEVELS[ni]; }
+    const p = { adult: !!r.read(1), ageMonths: r.read(6), noisy: !!r.read(1), noise: 0.3, ears: [] };
+    if (ver >= 2) { const ni = r.read(4); p.noise = NOISE_LEVELS[ni] == null ? 0.3 : NOISE_LEVELS[ni]; }
     for (let i = 0; i < 2; i++) {
       const e = { ac: [], bc: [] };
       for (let k = 0; k < 4; k++) e.ac.push((r.read(5) - 1) * 5);

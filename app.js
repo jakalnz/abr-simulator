@@ -14,7 +14,7 @@
   const S = {
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
-    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.2,      // noise comes from the patient (case setting)
+    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.3,      // noise comes from the patient (case setting)
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
@@ -534,7 +534,7 @@
   }
   function fillPatientModal() {
     const p = S.patient;
-    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.2 : p.noise);
+    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.3 : p.noise);
     $('pMonths').disabled = p.adult;
     document.querySelectorAll('#pAud input').forEach((inp) => (inp.value = p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i]));
     document.querySelectorAll('#pPath [data-p]').forEach((el) => { const v = p.ears[+el.dataset.e][el.dataset.p]; el.value = v == null ? '' : v; });
