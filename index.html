@@ -22,6 +22,8 @@
   <button id="btnPatient">Patient / case&hellip;</button>
   <button id="btnShare">Copy share link</button>
   <button id="btnReport">Report&hellip;</button>
+  <span class="tgrp" title="Display"><button id="tbAB" class="tog" title="Show A/B splits (off by default)">A/B</button><button id="tbC" class="tog" title="Show contralateral traces">C</button></span>
+  <span class="tgrp" title="Arrange curves"><button class="ord" data-ord="O" title="Order by testing order">O</button><button class="ord" data-ord="F" title="Order by frequency (click, then 0.5-4 kHz)">F</button><button class="ord" data-ord="I" title="Order by intensity (highest first)">I</button></span>
   <span class="sp"></span>
   <span id="sessionTxt">Current session</span>
 </div>
@@ -59,7 +61,7 @@
     <div class="tabpane" id="tab-edit" hidden>
       <div class="box">
         <label class="row"><span>Channels shown</span><select id="chanSel"><option value="ipsi">Ipsilateral</option><option value="both">Ipsi + Contra</option></select></label>
-        <label class="row"><span>Show A / B splits</span><input type="checkbox" id="showAB" checked></label>
+        <label class="row"><span>Show A / B splits</span><input type="checkbox" id="showAB"></label>
         <div class="row"><span>Scale</span><span><button id="zoomDn">&#9660;</button> <button id="zoomUp">&#9650;</button></span></div>
       </div>
       <div class="box"><div class="lbl">Curves</div><div id="traceList"></div></div>

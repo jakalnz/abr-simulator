@@ -56,8 +56,11 @@
 
   // frequency-dependent tone-burst amplitude: low-frequency tone V-V' complexes are larger and grow more linearly with level
   // (Stapells & Ruben 1989 Fig 3: 500 Hz 0.11 -> 0.46 uV over 0-40 dB nHL; 2 kHz 0.18 -> 0.25 uV, saturating above 30 dB)
-  const TONE_FREQ_GAIN = [2.6, 1.8, 1.15, 0.8];
-  const TONE_ONSET = 16;                                  // dB-equivalent onset offset for tone-burst amplitude growth
+  const TONE_FREQ_GAIN = [2.4, 1.5, 1.2, 1.0];
+  const BONE_LF_GAIN = [1.2, 1.1, 1, 1];               // low-frequency BC tones excite a wider cochlear area (Stapells & Ruben 1989 discussion)
+  // dB-equivalent onset offset for tone-burst amplitude growth: 500 Hz grows steeply with level (0.11 -> 0.46 uV over 0-40 dB nHL),
+  // 2 kHz is nearly saturated at threshold (0.18 -> 0.25 uV; Stapells & Ruben 1989 Fig 3)
+  const TONE_ONSET = [4, 8, 10, 10];
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
   /* ---------- patient ---------- */
@@ -189,7 +192,7 @@
     let att = 0;
     if (stim.freq) {                       // tone-burst: excitation spreads from the stimulus place
       const oct = Math.log2(cf / stim.freq);
-      att = oct >= 0 ? 55 * oct : -22 * oct;      // above-CF fibres steep, below-CF (upward spread) shallow
+      att = oct >= 0 ? 55 * oct : -32 * oct;      // above-CF fibres steep, below-CF (upward spread) shallow
     }
     return inp.level - att - thr + (stim.freq ? 0 : 6);   // click: broadband temporal summation
   }
@@ -219,13 +222,13 @@
       const bcHL = interp(bone ? ear.bc : ear.bc, CH_CF[ci]);
       const rec = 0.6 * clamp(bcHL / 60, 0, 1);             // recruitment (sensorineural part only)
       const Ee = E * (1 + rec);
-      const a = 1 - Math.exp(-(Ee + (f ? TONE_ONSET : 0)) / TAU_A);   // tone bursts: a detectable (~2x residual noise) response right at threshold
+      const a = 1 - Math.exp(-(Ee + (f ? interp(TONE_ONSET, f) : 0)) / TAU_A);   // tone bursts: a detectable (~2x residual noise) response right at threshold
       const w = f ? 1 / 3 : CH_W[ci] / 5.2;
       const jit = (0.05 + 0.25 * Math.exp(-Ee / 25)) * (1 + 6 * ansdD);
       for (const k of WAVES) {
         const W = WV[k];
-        let amp = W.A * w * Math.pow(a, W.p);
-        if (f) amp *= TONE_GAIN[k] * toneFreqGain(f);
+        let amp = W.A * w * Math.pow(a, f ? 1 : W.p);   // tone bursts: near-linear growth with level
+        if (f) amp *= TONE_GAIN[k] * toneFreqGain(f) * (bone ? interp(BONE_LF_GAIN, f) : 1);
         if (!ipsi) amp *= W.cg;
         amp *= adultAmp(p, k);
         // rate: I/III/II adapt more than V
@@ -245,9 +248,13 @@
                + (ipsi ? 0 : W.cd)
                + rf * { I: 0.10, II: 0.13, III: 0.20, IV: 0.28, V: 0.35 }[k] * (1 + 1.5 * retroS)
                + (cond ? 0.06 : 0);
-        const su = Math.sqrt(W.su * W.su + jit * jit + envJit(f) * envJit(f) * (f ? 0.5 : 0));
-        const h = amp * W.su / su;
-        const trb = W.tr[0] * (f ? 1.2 : 1), trd = W.tr[1], trs = W.tr[2];
+        // Tone bursts: the response is spread in time by the burst itself, so the V-V' complex is broad and slow at low
+        // frequencies (~1 ms sigma at 0.5 kHz, ~0.25 ms at 2 kHz) and the trough after V is later and wider.
+        const senv = f ? 0.5 * 1000 / f : 0;
+        const su = Math.sqrt(W.su * W.su + jit * jit + senv * senv);
+        const h = amp * (f ? Math.sqrt(W.su / su) : W.su / su);
+        const kf = f ? 1 + 3 * senv : 1;
+        const trb = W.tr[0] * (f ? 0.7 : 1), trd = W.tr[1] * kf, trs = W.tr[2] * kf;
         const lo = Math.max(0, Math.floor((mu - 4 * su - TS0) / DT));
         const hi = Math.min(NS - 1, Math.ceil((mu + trd + 4 * trs - TS0) / DT));
         for (let i = lo; i <= hi; i++) {
@@ -476,7 +483,7 @@
         const c = this.clean.ipsi; let bi = -1, bm = 0.02;
         for (let i = Math.round((5 - W0) / DT); i < c.length; i++) if (c[i] > bm) { bm = c[i]; bi = i; }
         const tpk = bi < 0 ? 9 : W0 + bi * DT;
-        const len = 3 + 1500 / this.stim.freq;           // V-V' complex is briefer at high frequencies (~6 ms at 0.5 kHz, ~3.4 ms at 4 kHz)
+        const len = 3.5 + 3000 / this.stim.freq;           // V-V' complex is broad at low frequencies (~9.5 ms at 0.5 kHz, ~4.3 ms at 4 kHz)
         ta = Math.max(2, tpk - 0.3 * len); tb = Math.min(this.w1 - 2, tpk + 0.7 * len);
       }
       const a0 = Math.round((ta - W0) / DT), a1 = Math.round((tb - W0) / DT);

@@ -12,7 +12,7 @@
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
     reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.8,
-    chan: 'ipsi', showAB: true, zoom: 1,
+    chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
     tab: 'record', wave: 'V', nextId: 1
   };
@@ -35,8 +35,8 @@
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
-    if (S.type === 0) { S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
-    else { S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
+    if (S.type === 0) { S.zoom = 1; S.noise = 0.8; S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
+    else { S.zoom = 1.6; S.noise = 0.5; S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
     clampLevel();
   }
   function clampLevel() {
@@ -50,7 +50,9 @@
     fill($('rate'), RATES, S.rate, (v) => v.toFixed(1)); fill($('nmax'), NMAX, S.nmax);
     $('noise').value = String(S.noise); $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.checked = +r.value === S.ear));
-    $('chanSel').value = S.chan;
+    $('chanSel').value = S.chan; $('showAB').checked = S.showAB;
+    $('tbAB').classList.toggle('on', S.showAB); $('tbC').classList.toggle('on', S.chan === 'both');
+    document.querySelectorAll('.ord').forEach((b) => b.classList.toggle('on', b.dataset.ord === S.order));
     const m = maxLevel();
     const g = $('lvlGrid'); g.innerHTML = '';
     for (let l = 0; l <= 100; l += 10) {
@@ -117,15 +119,33 @@
   }
 
   /* ---------- rendering ---------- */
+  // curve arrangement: O = testing order, F = frequency (click first, then 0.5-4 kHz), I = intensity (highest first)
+  const ORDERS = {
+    O: (a, b) => a.id - b.id,
+    F: (a, b) => a.stim.freq - b.stim.freq || b.stim.level - a.stim.level || a.id - b.id,
+    I: (a, b) => b.stim.level - a.stim.level || a.stim.freq - b.stim.freq || a.id - b.id
+  };
+  const PALETTE = [null, '#7b2d8e', '#d2691e', '#1e8a5a', '#a0a000'];   // colours for overlaid replicates (null = ear colour)
   function paneItems(ear, forReport) {
     const list = S.traces.filter((t) => t.ear === ear && !t.hidden);
     if (S.live && S.live.ear === ear) list.push(S.live);
-    list.sort((a, b) => b.stim.level - a.stim.level || a.id - b.id);
-    const items = [];
+    list.sort(ORDERS[S.order]);
+    // O: every curve on its own baseline. F / I: curves with the same details (frequency, level, transducer, rate,
+    // polarity) are overlaid on one baseline, as Eclipse overlays replicates.
+    const groups = [], byKey = new Map();
     for (const t of list) {
-      items.push({ tr: t, chan: 0, label: t.label });
-      if (S.chan === 'both' || forReport === 'both') items.push({ tr: t, chan: 1, label: t.label + ' c' });
+      const key = S.order === 'O' ? t.id : [t.stim.freq, t.stim.level, t.stim.transducer, t.stim.rate, t.stim.polarity].join('|');
+      let g = byKey.get(key); if (!g) { g = []; byKey.set(key, g); groups.push(g); }
+      g.push(t);
     }
+    const showC = S.chan === 'both' || forReport === 'both';
+    const items = []; let slot = 0;
+    for (const g of groups) {
+      g.forEach((t, gi) => items.push({ tr: t, chan: 0, label: t.label, slot, gi, n: g.length }));
+      slot++;
+      if (showC) { g.forEach((t, gi) => items.push({ tr: t, chan: 1, label: t.label + ' c', slot, gi, n: g.length })); slot++; }
+    }
+    items.nSlots = slot;
     return items;
   }
   const L_MARGIN = 92, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
@@ -134,7 +154,7 @@
     const items = paneItems(ear, forReport);
     const plotH = H - T_MARGIN - B_MARGIN;
     const w1 = items.reduce((m, it) => Math.max(m, it.tr.w1 || W1), W1);
-    const slot = Math.min(120, plotH / Math.max(items.length, 1));
+    const slot = Math.min(120, plotH / Math.max(items.nSlots || 1, 1));
     return { W, H, items, slot, plotH, w1, px200: S.zoom * Math.min(40, Math.max(12, slot * 0.3)),
              x: (t) => L_MARGIN + (t - W0) / (w1 - W0) * (W - L_MARGIN - R_MARGIN),
              tOf: (x) => W0 + (x - L_MARGIN) / (W - L_MARGIN - R_MARGIN) * (w1 - W0),
@@ -146,7 +166,7 @@
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const lay = layout(cv, ear, forReport); lay.ys = []; cv._lay = lay;
+    const lay = layout(cv, ear, forReport); lay.ys = []; lay.tagY = []; cv._lay = lay;
     const { x, items, slot, px200 } = lay;
     // grid
     ctx.strokeStyle = '#d3d3d3'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1; ctx.fillStyle = '#444'; ctx.font = '11px Segoe UI'; ctx.textAlign = 'center';
@@ -160,26 +180,30 @@
     ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.moveTo(L_MARGIN - 8, T_MARGIN + 6); ctx.lineTo(L_MARGIN - 8, T_MARGIN + 6 + px200); ctx.stroke();
     ctx.fillStyle = '#000'; ctx.fillText('+200 nV', 6, T_MARGIN + 12);
     const col = ear === 0 ? '#8b1414' : '#1a1a9c';
-    items.forEach((it, i) => {
-      const t = it.tr, d = t.ch[it.chan], base = lay.base(i) + ((t.dy && t.dy[it.chan]) || 0);
-      lay.ys[i] = base;
+    // the selected curve is drawn last (on top of any overlaid replicates)
+    const drawOrder = items.map((_, i) => i).sort((a, b) => (items[a].tr === S.sel && !forReport) - (items[b].tr === S.sel && !forReport));
+    drawOrder.forEach((i) => {
+      const it = items[i];
+      const t = it.tr, d = t.ch[it.chan], base = lay.base(it.slot) + ((t.dy && t.dy[it.chan]) || 0);
+      const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
+      lay.ys[i] = base; lay.tagY[i] = tagY;
       const sel = S.sel === t && !forReport, isC = it.chan === 1;
       const ys = (v) => base - v * 1000 / 200 * px200;
-      const line = (arr, color, lw, dash) => {
-        ctx.save(); ctx.beginPath(); ctx.rect(L_MARGIN, T_MARGIN, w - L_MARGIN - R_MARGIN, h - T_MARGIN - B_MARGIN); ctx.clip();
+      const line = (arr, color, lw, dash, alpha) => {
+        ctx.save(); ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.beginPath(); ctx.rect(L_MARGIN, T_MARGIN, w - L_MARGIN - R_MARGIN, h - T_MARGIN - B_MARGIN); ctx.clip();
         ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash || []);
         ctx.beginPath();
         for (let k = 0; k < arr.length; k++) { const px = x(W0 + k * DT), py = ys(arr[k]); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
         ctx.stroke(); ctx.restore();
       };
-      if (sel && S.showAB && t.n > 0) { line(d.A, '#1f9d9d', 1); line(d.B, '#2b8a2b', 1); }
-      line(d.avg, isC ? (ear === 0 ? '#c88' : '#88c') : col, sel ? 2.2 : 1.5, isC ? [5, 3] : null);
+      if (S.showAB && t.n > 0) { line(d.A, '#1f9d9d', 1); line(d.B, '#2b8a2b', 1); }
+      line(d.avg, ecol, sel ? 2.4 : 1.5, isC ? [5, 3] : null, isC ? 0.55 : 1);
       // label tag
-      ctx.fillStyle = sel ? col : (isC ? '#999' : '#fff'); ctx.strokeStyle = isC ? '#999' : col; ctx.lineWidth = 1;
-      ctx.fillRect(4, base - 8, L_MARGIN - 20, 16); ctx.strokeRect(4, base - 8, L_MARGIN - 20, 16);
-      ctx.fillStyle = sel || isC ? '#fff' : col; ctx.font = '11px Segoe UI'; ctx.textAlign = 'left';
-      ctx.fillText(it.label + (t.live ? '*' : ''), 8, base + 4);
-      if (t.n > 0 && !t.live) { ctx.fillStyle = '#2b8a2b'; ctx.fillText('A/B', w - R_MARGIN - 26, base - 4 + 12 * 0); }
+      ctx.fillStyle = sel ? ecol : (isC ? '#999' : '#fff'); ctx.strokeStyle = isC ? '#999' : ecol; ctx.lineWidth = 1;
+      ctx.fillRect(4, tagY - 8, L_MARGIN - 20, 16); ctx.strokeRect(4, tagY - 8, L_MARGIN - 20, 16);
+      ctx.fillStyle = sel || isC ? '#fff' : ecol; ctx.font = '11px Segoe UI'; ctx.textAlign = 'left';
+      ctx.fillText(it.label + (t.live ? '*' : ''), 8, tagY + 4);
+      if (S.showAB && t.n > 0 && !t.live) { ctx.fillStyle = '#2b8a2b'; ctx.fillText('A/B', w - R_MARGIN - 26, tagY - 4); }
       // wave marks
       if (!isC) for (const k of WAVES) {
         const tm = t.marks && t.marks[k]; if (tm == null) continue;
@@ -241,10 +265,14 @@
   function paneClick(cv, ear, ev) {
     const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, lay = cv._lay;
     if (!lay || !lay.items.length) return null;
-    let bi = -1, bd = Infinity;
-    lay.ys.forEach((y, i) => { const d = Math.abs(my - y); if (d < bd) { bd = d; bi = i; } });
-    if (bi < 0 || bd > Math.max(lay.slot * 0.8, 24)) return null;
-    return { it: lay.items[bi], t: lay.tOf(mx), i: bi, lay, onTag: mx < L_MARGIN - 12 && bd <= 12, mx, my };
+    const onTag = mx < L_MARGIN - 12;
+    const pos = onTag ? lay.tagY : lay.ys;
+    let bd = Infinity;
+    pos.forEach((y) => { const d = Math.abs(my - y); if (d < bd) bd = d; });
+    if (bd > (onTag ? 9 : Math.max(lay.slot * 0.8, 24))) return null;
+    let bi = -1;
+    pos.forEach((y, i) => { if (Math.abs(my - y) <= bd + 0.5 && (bi < 0 || lay.items[i].tr === S.sel)) bi = i; });
+    return { it: lay.items[bi], t: lay.tOf(mx), i: bi, lay, onTag, mx, my };
   }
   function bindDrag(cv, ear) {
     cv.addEventListener('mousedown', (ev) => {
@@ -307,7 +335,7 @@
     }
     if (tr.parts) add('Unmerge', () => unmerge(tr));
     add(tr.hidden ? 'Show' : 'Hide', () => (tr.hidden = !tr.hidden));
-    add(S.chan === 'both' ? 'Ipsilateral only' : 'Show contralateral (Ipsi / Contra)', () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; $('chanSel').value = S.chan; });
+    add(S.chan === 'both' ? 'Ipsilateral only' : 'Show contralateral (Ipsi / Contra)', () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; syncUI(); });
     add('Clear marks', () => (tr.marks = {}));
     add('Reset position', () => (tr.dy = [0, 0]));
     add('Export waveform (CSV)', () => exportCsv(tr));
@@ -482,8 +510,14 @@
     $('lvlDn').onclick = () => { S.level -= 5; clampLevel(); syncUI(); };
     $('btnStart').onclick = () => (S.acq ? stop() : start());
     $('btnPause').onclick = () => { S.paused = !S.paused; setButtons(); };
-    $('chanSel').onchange = () => { S.chan = $('chanSel').value; render(); };
-    $('showAB').onchange = () => { S.showAB = $('showAB').checked; render(); };
+    $('chanSel').onchange = () => { S.chan = $('chanSel').value; syncUI(); render(); };
+    $('showAB').onchange = () => { S.showAB = $('showAB').checked; syncUI(); render(); };
+    $('tbAB').onclick = () => { S.showAB = !S.showAB; syncUI(); render(); };
+    $('tbC').onclick = () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; syncUI(); render(); };
+    document.querySelectorAll('.ord').forEach((b) => (b.onclick = () => {
+      S.order = b.dataset.ord; S.traces.forEach((t) => (t.dy = [0, 0]));   // re-arranging clears manual positions
+      syncUI(); render();
+    }));
     $('zoomUp').onclick = () => { S.zoom *= 1.25; render(); }; $('zoomDn').onclick = () => { S.zoom /= 1.25; render(); };
     $('btnDel').onclick = () => { if (S.sel) { S.traces = S.traces.filter((t) => t !== S.sel); S.sel = null; renderList(); render(); } };
     $('btnClear').onclick = () => { S.traces = []; S.sel = null; renderList(); render(); };

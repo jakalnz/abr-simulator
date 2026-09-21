@@ -44,14 +44,17 @@ Literature anchors (do not change casually — each constant is fitted to a sour
 - Bone conduction: Stapells & Ruben 1989 (infant BC tones: latency/amplitude vs level, ipsi/contra asymmetry);
   interaural attenuation falls with age (`boneIA()`: ~19 dB at 6 months, ~6 dB adult); normal BC thresholds
   `ABR_CORR_BC`. BCEHP protocol (Nov 2022) gives max levels (`MAX_LEVEL`) and the ANSD criteria.
-- Tone-burst amplitudes (`TONE_GAIN`, `TONE_FREQ_GAIN`, `TONE_ONSET`) are tuned by hand so that detectability of a
-  normal ear matches Stapells 1995 (≈100% at 30 dB nHL, threshold ≈ 13 dB nHL at 2 kHz). No amplitude table
-  was available in the papers.
+- Tone-burst wave shape and amplitude: the V-V' complex is broad at low frequencies (width `senv = 0.5/f`, trough delay/width
+  scaled by `1 + 3*senv`), so 500 Hz is slow and smooth, 2-4 kHz compact. Amplitudes (`TONE_GAIN`, `TONE_FREQ_GAIN`,
+  `TONE_ONSET` (per frequency), `BONE_LF_GAIN`) are tuned by hand against Stapells & Ruben 1989 Fig 3 (infant BC V-V'
+  amplitude: 500 Hz 0.21-0.46 uV, 2 kHz 0.18-0.25 uV) and so that detectability of a normal ear matches Stapells 1995
+  (~100% at 30 dB nHL, 2 kHz threshold ~13 dB nHL). No amplitude table exists in those papers; 500 Hz is deliberately
+  no clearer than 2 kHz for AC at the same nHL.
 - Click and tone-burst thresholds use different code paths; click thresholds (`ABR_CORR_AC`, `ABR_BASE`) were
   tuned together with the click level series — re-check both if you change one.
 
 Display windows: click −1…13 ms, tone burst −1…25 ms (`nwFor()`); trace arrays have different lengths, so any
-per-sample code must use `arr.length`, not a global `NW`. Reproducibility / Fmp use 1–10 ms for clicks and a 3–6 ms
+per-sample code must use `arr.length`, not a global `NW`. Reproducibility / Fmp use 1–10 ms for clicks and a ~4–10 ms (3.5 + 3000/f)
 window around the modelled wave V for tone bursts (Fmp is evaluated near wave V).
 
 ## Patients and share links

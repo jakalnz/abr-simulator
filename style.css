@@ -81,3 +81,7 @@ button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #
 .locked .admin { display: none !important; }
 #mPatient:not(.locked) .admin-off, #mPatient:not(.locked) #pPw, #mPatient:not(.locked) #pUnlock { display: none; }
 .pane canvas { user-select: none; }
+.tgrp { display: inline-flex; margin-left: 6px; }
+.tgrp button { border-radius: 0; min-width: 30px; margin-left: -1px; font-weight: 600; }
+.tgrp button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; } .tgrp button:last-child { border-radius: 0 3px 3px 0; }
+.tgrp button.on { background: #3b78c9; color: #fff; border-color: #1f4f96; }
