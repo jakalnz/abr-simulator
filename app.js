@@ -11,7 +11,7 @@
   const S = {
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
-    reject: 40, hp: 100, lp: 3000, speed: 100,
+    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.8,
     chan: 'ipsi', showAB: true, zoom: 1,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
     tab: 'record', wave: 'V', nextId: 1
@@ -36,7 +36,7 @@
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
     if (S.type === 0) { S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
-    else { S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 1000; if (S.level > 70) S.level = 60; }
+    else { S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
     clampLevel();
   }
   function clampLevel() {
@@ -48,7 +48,7 @@
     $('protocol').value = $('stType').value = String(S.type);
     $('level').value = S.level; $('trans').value = S.trans; $('pol').value = S.pol;
     fill($('rate'), RATES, S.rate, (v) => v.toFixed(1)); fill($('nmax'), NMAX, S.nmax);
-    $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
+    $('noise').value = String(S.noise); $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.checked = +r.value === S.ear));
     $('chanSel').value = S.chan;
     const m = maxLevel();
@@ -66,7 +66,7 @@
   function readUI() {
     S.type = +$('stType').value; S.level = +$('level').value || 0; S.trans = $('trans').value; S.pol = $('pol').value;
     S.rate = +$('rate').value; S.nmax = +$('nmax').value; S.reject = +$('reject').value;
-    S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
+    S.noise = +$('noise').value || 1; S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
     S.ear = +document.querySelector('input[name=ear]:checked').value;
     clampLevel();
   }
@@ -84,7 +84,7 @@
     if (S.acq) return;
     readUI();
     const stim = currentStim();
-    S.acq = new M.Acquisition(S.patient, stim, { nMax: S.nmax, reject: S.reject, hp: S.hp, lp: S.lp });
+    S.acq = new M.Acquisition(S.patient, stim, { nMax: S.nmax, reject: S.reject, hp: S.hp, lp: S.lp, noise: S.noise });
     const { base, label } = labelFor(stim);
     S.live = { id: S.nextId++, base, label, ear: stim.ear, stim, dy: [0, 0], opts: { hp: S.hp, lp: S.lp }, live: true, marks: {}, hidden: false, ...blank(stim) };
     S.paused = false; S.last = performance.now();
@@ -324,7 +324,13 @@
     const ch = [0, 1].map((k) => ({ avg: mix(a.ch[k].avg, b.ch[k].avg), A: mix(a.ch[k].A, b.ch[k].A), B: mix(a.ch[k].B, b.ch[k].B) }));
     const rn = 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
     // reproducibility of the new A/B split (1-10 ms) and an Fmp-like statistic from the combined average
-    const tone = NWc > M.NW, i0 = Math.round(((tone ? 2 : 1) - W0) / DT), i1 = Math.round(((tone ? 22 : 10) - W0) / DT), i2 = Math.round(((tone ? 24 : 12) - W0) / DT);
+    let ta = 1, tb = 10;
+    if (NWc > M.NW) {                     // tone burst: statistics around the wave V-V' peak of the combined average
+      let bi = Math.round((5 - W0) / DT); const av = ch[0].avg;
+      for (let i = bi; i < NWc; i++) if (av[i] > av[bi]) bi = i;
+      const tpk = W0 + bi * DT; ta = Math.max(2, tpk - 2); tb = Math.min(W0 + (NWc - 1) * DT - 2, tpk + 8);
+    }
+    const i0 = Math.round((ta - W0) / DT), i1 = Math.round((tb - W0) / DT), i2 = Math.min(NWc - 1, Math.round((tb + 2 - W0) / DT));
     let ma = 0, mb = 0; const m = i1 - i0;
     for (let i = i0; i < i1; i++) { ma += ch[0].A[i]; mb += ch[0].B[i]; }
     ma /= m; mb /= m;
@@ -470,7 +476,7 @@
     }));
     $('protocol').onchange = () => { S.type = +$('protocol').value; applyProtocolDefaults(); syncUI(); };
     $('stType').onchange = () => { S.type = +$('stType').value; applyProtocolDefaults(); syncUI(); };
-    ['level', 'trans', 'pol', 'rate', 'nmax', 'reject', 'hpf', 'lpf', 'speed'].forEach((id) => ($(id).onchange = () => { readUI(); syncUI(); }));
+    ['level', 'trans', 'pol', 'rate', 'nmax', 'reject', 'hpf', 'lpf', 'speed', 'noise'].forEach((id) => ($(id).onchange = () => { readUI(); syncUI(); }));
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.onchange = () => { readUI(); }));
     $('lvlUp').onclick = () => { S.level += 5; clampLevel(); syncUI(); };
     $('lvlDn').onclick = () => { S.level -= 5; clampLevel(); syncUI(); };

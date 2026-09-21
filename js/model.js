@@ -56,7 +56,8 @@
 
   // frequency-dependent tone-burst amplitude: low-frequency tone V-V' complexes are larger and grow more linearly with level
   // (Stapells & Ruben 1989 Fig 3: 500 Hz 0.11 -> 0.46 uV over 0-40 dB nHL; 2 kHz 0.18 -> 0.25 uV, saturating above 30 dB)
-  const TONE_FREQ_GAIN = [2.6, 1.8, 0.9, 0.65];
+  const TONE_FREQ_GAIN = [2.6, 1.8, 1.15, 0.8];
+  const TONE_ONSET = 16;                                  // dB-equivalent onset offset for tone-burst amplitude growth
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
   /* ---------- patient ---------- */
@@ -218,7 +219,7 @@
       const bcHL = interp(bone ? ear.bc : ear.bc, CH_CF[ci]);
       const rec = 0.6 * clamp(bcHL / 60, 0, 1);             // recruitment (sensorineural part only)
       const Ee = E * (1 + rec);
-      const a = 1 - Math.exp(-Ee / TAU_A);
+      const a = 1 - Math.exp(-(Ee + (f ? TONE_ONSET : 0)) / TAU_A);   // tone bursts: a detectable (~2x residual noise) response right at threshold
       const w = f ? 1 / 3 : CH_W[ci] / 5.2;
       const jit = (0.05 + 0.25 * Math.exp(-Ee / 25)) * (1 + 6 * ansdD);
       for (const k of WAVES) {
@@ -404,7 +405,7 @@
   class Acquisition {
     constructor(patient, stim, opts) {
       this.p = patient; this.stim = stim; this.nw = nwFor(stim); this.w1 = W0 + (this.nw - 1) * DT;
-      this.opts = Object.assign({ nMax: 2000, reject: 40, hp: 100, lp: 3000 }, opts || {});
+      this.opts = Object.assign({ nMax: 2000, reject: 40, hp: 100, lp: 3000, noise: 1 }, opts || {});
       if (stim.polarity === 'alt') {
         // Eclipse-style alternating: buffer A = rarefaction sweeps, buffer B = condensation sweeps.
         // The displayed average is their mean, so the CM cancels while staying visible in A vs B.
@@ -417,7 +418,7 @@
         this.clean = simulate(patient, stim, this.opts);
         this.sigA = this.sigB = this.clean;
       }
-      this.sd1 = sweepNoise(patient);
+      this.sd1 = sweepNoise(patient) * this.opts.noise;      // opts.noise = user EEG-noise multiplier
       this.n = 0; this.rejected = 0; this.total = 0; this.wsum = [0, 0];
       this.acc = [0, 1].map(() => [new Float64Array(this.nw), new Float64Array(this.nw)]);   // [channel][half] weighted noise sums
       this.blk = 0;
@@ -468,7 +469,16 @@
       const s = out.ch[0];
       // wave reproducibility: A/B correlation over 1-10 ms
       // response window: clicks 1-10 ms; tone bursts 2-22 ms (wave V arrives 7-15 ms)
-      const ta = this.stim.freq ? 2 : 1, tb = this.stim.freq ? 22 : 10;
+      // (like Fmp, which is evaluated around the expected wave V, tone-burst statistics look at the V-V' region:
+      //  a window of ~3-6 ms around the modelled wave V peak; if there is no modelled response, at ~9 ms)
+      let ta = 1, tb = 10;
+      if (this.stim.freq) {
+        const c = this.clean.ipsi; let bi = -1, bm = 0.02;
+        for (let i = Math.round((5 - W0) / DT); i < c.length; i++) if (c[i] > bm) { bm = c[i]; bi = i; }
+        const tpk = bi < 0 ? 9 : W0 + bi * DT;
+        const len = 3 + 1500 / this.stim.freq;           // V-V' complex is briefer at high frequencies (~6 ms at 0.5 kHz, ~3.4 ms at 4 kHz)
+        ta = Math.max(2, tpk - 0.3 * len); tb = Math.min(this.w1 - 2, tpk + 0.7 * len);
+      }
       const a0 = Math.round((ta - W0) / DT), a1 = Math.round((tb - W0) / DT);
       let ma = 0, mb = 0; const m = a1 - a0;
       for (let i = a0; i < a1; i++) { ma += s.A[i]; mb += s.B[i]; }
