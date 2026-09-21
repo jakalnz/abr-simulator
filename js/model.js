@@ -467,7 +467,9 @@
       }
       const s = out.ch[0];
       // wave reproducibility: A/B correlation over 1-10 ms
-      const a0 = Math.round((1 - W0) / DT), a1 = Math.round((10 - W0) / DT);
+      // response window: clicks 1-10 ms; tone bursts 2-22 ms (wave V arrives 7-15 ms)
+      const ta = this.stim.freq ? 2 : 1, tb = this.stim.freq ? 22 : 10;
+      const a0 = Math.round((ta - W0) / DT), a1 = Math.round((tb - W0) / DT);
       let ma = 0, mb = 0; const m = a1 - a0;
       for (let i = a0; i < a1; i++) { ma += s.A[i]; mb += s.B[i]; }
       ma /= m; mb /= m;
@@ -476,7 +478,7 @@
       out.repro = saa && sbb ? clamp(sab / Math.sqrt(saa * sbb), 0, 1) : 0;
       // Fmp-like statistic: response variance in the 1-12 ms window relative to residual noise
       const rnU = out.rn / 1000;
-      let pw = 0; const b1 = Math.round((12 - W0) / DT);
+      let pw = 0; const b1 = Math.round((tb + 2 - W0) / DT);
       for (let i = a0; i < b1; i++) pw += this.clean.ipsi[i] * this.clean.ipsi[i];
       pw /= (b1 - a0);
       out.fmp = rnU > 0 ? (pw + rnU * rnU) / (rnU * rnU) * (0.9 + 0.2 * Math.random()) : 0;

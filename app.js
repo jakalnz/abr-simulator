@@ -324,7 +324,7 @@
     const ch = [0, 1].map((k) => ({ avg: mix(a.ch[k].avg, b.ch[k].avg), A: mix(a.ch[k].A, b.ch[k].A), B: mix(a.ch[k].B, b.ch[k].B) }));
     const rn = 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
     // reproducibility of the new A/B split (1-10 ms) and an Fmp-like statistic from the combined average
-    const i0 = Math.round((1 - W0) / DT), i1 = Math.round((10 - W0) / DT), i2 = Math.round((12 - W0) / DT);
+    const tone = NWc > M.NW, i0 = Math.round(((tone ? 2 : 1) - W0) / DT), i1 = Math.round(((tone ? 22 : 10) - W0) / DT), i2 = Math.round(((tone ? 24 : 12) - W0) / DT);
     let ma = 0, mb = 0; const m = i1 - i0;
     for (let i = i0; i < i1; i++) { ma += ch[0].A[i]; mb += ch[0].B[i]; }
     ma /= m; mb /= m;
