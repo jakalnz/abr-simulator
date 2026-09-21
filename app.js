@@ -11,7 +11,7 @@
   const S = {
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
-    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.8,
+    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.2,      // noise comes from the patient (case setting)
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
@@ -36,8 +36,8 @@
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
-    if (S.type === 0) { S.zoom = 1; S.noise = 0.8; S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
-    else { S.zoom = 1.6; S.noise = 0.5; S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
+    if (S.type === 0) { S.zoom = 1; S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
+    else { S.zoom = 1.6; S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
     clampLevel();
   }
   function clampLevel() {
@@ -49,7 +49,7 @@
     $('protocol').value = $('stType').value = String(S.type);
     $('level').value = S.level; $('trans').value = S.trans; $('pol').value = S.pol;
     fill($('rate'), RATES, S.rate, (v) => v.toFixed(1)); fill($('nmax'), NMAX, S.nmax);
-    $('noise').value = String(S.noise); $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
+    $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.checked = +r.value === S.ear));
     $('chanSel').value = S.chan; $('showAB').checked = S.showAB;
     $('tbAB').classList.toggle('on', S.showAB); $('tbC').classList.toggle('on', S.chan === 'both');
@@ -69,7 +69,7 @@
   function readUI() {
     S.type = +$('stType').value; S.level = +$('level').value || 0; S.trans = $('trans').value; S.pol = $('pol').value;
     S.rate = +$('rate').value; S.nmax = +$('nmax').value; S.reject = +$('reject').value;
-    S.noise = parseFloat($('noise').value); if (!isFinite(S.noise)) S.noise = 1; S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
+    S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
     S.ear = +document.querySelector('input[name=ear]:checked').value;
     clampLevel();
   }
@@ -437,13 +437,13 @@
   }
   function fillPatientModal() {
     const p = S.patient;
-    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet';
+    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.2 : p.noise);
     $('pMonths').disabled = p.adult;
     document.querySelectorAll('#pAud input').forEach((inp) => (inp.value = p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i]));
     document.querySelectorAll('#pPath [data-p]').forEach((el) => { const v = p.ears[+el.dataset.e][el.dataset.p]; el.value = v == null ? '' : v; });
   }
   function readPatientModal() {
-    const p = M.newPatient({ name: $('pName').value.trim() || 'Patient', adult: $('pAge').value === 'adult', ageMonths: Math.max(0, Math.min(63, +$('pMonths').value || 0)), noisy: $('pState').value === 'noisy' });
+    const p = M.newPatient({ name: $('pName').value.trim() || 'Patient', adult: $('pAge').value === 'adult', ageMonths: Math.max(0, Math.min(63, +$('pMonths').value || 0)), noisy: $('pState').value === 'noisy', noise: parseFloat($('pNoise').value) });
     document.querySelectorAll('#pAud input').forEach((inp) => { p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i] = Math.round((+inp.value || 0) / 5) * 5; });
     document.querySelectorAll('#pPath [data-p]').forEach((el) => {
       const k = el.dataset.p, e = p.ears[+el.dataset.e];
@@ -460,7 +460,7 @@
   }
   function setPatient(p) {
     if (S.acq) stop();
-    S.patient = M.newPatient(JSON.parse(JSON.stringify(p)));
+    S.patient = M.newPatient(JSON.parse(JSON.stringify(p))); S.noise = S.patient.noise;
     S.pages.forEach((p) => { p.traces = []; p.sel = null; }); S.traces = S.pages[S.page].traces; S.sel = null; S.live = null;
     syncUI(); renderList(); render();
   }
@@ -520,7 +520,7 @@
     }));
     $('protocol').onchange = () => { S.type = +$('protocol').value; applyProtocolDefaults(); syncUI(); };
     $('stType').onchange = () => { S.type = +$('stType').value; applyProtocolDefaults(); syncUI(); };
-    ['level', 'trans', 'pol', 'rate', 'nmax', 'reject', 'hpf', 'lpf', 'speed', 'noise'].forEach((id) => ($(id).onchange = () => { readUI(); syncUI(); }));
+    ['level', 'trans', 'pol', 'rate', 'nmax', 'reject', 'hpf', 'lpf', 'speed'].forEach((id) => ($(id).onchange = () => { readUI(); syncUI(); }));
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.onchange = () => { readUI(); }));
     $('lvlUp').onclick = () => { S.level += 5; clampLevel(); syncUI(); };
     $('lvlDn').onclick = () => { S.level -= 5; clampLevel(); syncUI(); };
@@ -549,7 +549,7 @@
     bindPatient();
     // shared case link
     const m = /case=([^&]+)/.exec(location.hash);
-    if (m) { try { S.patient = M.newPatient(window.ABRCodec.decode(m[1])); } catch (err) { toast('Could not read shared case: ' + err.message); } }
+    if (m) { try { S.patient = M.newPatient(window.ABRCodec.decode(m[1])); S.noise = S.patient.noise; } catch (err) { toast('Could not read shared case: ' + err.message); } }
     syncUI(); setButtons(); renderList(); render();
     setInterval(drawEEG, 120);
     window.ABRApp = S;   // exposed for debugging

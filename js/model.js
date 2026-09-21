@@ -69,7 +69,7 @@
                            latI: null, latIII: null, latV: null }, o || {});
   }
   function newPatient(o) {
-    const p = Object.assign({ name: 'New patient', adult: true, ageMonths: 4, noisy: false }, o || {});
+    const p = Object.assign({ name: 'New patient', adult: true, ageMonths: 4, noisy: false, noise: 0.2 }, o || {});   // noise = EEG noise multiplier (case setting)
     p.ears = [newEar(o && o.ears && o.ears[0]), newEar(o && o.ears && o.ears[1])];
     return p;
   }
