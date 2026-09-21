@@ -16,7 +16,11 @@ http://localhost:8232. It can be hosted on GitHub Pages as-is.
   level, filters and an adjustable EEG-noise level.
 - **Recording:** live averaging with A/B splits, response confidence, Fmp, residual noise and wave reproducibility.
   Ipsilateral and contralateral channels are recorded together.
-- **Analysis:** mark waves I–V on any curve (Latency tab) and read latencies and interpeak intervals; drag curves
+- **Labelling:** on the Latency tab place wave labels I–V (keys **1–5**, or click the selected curve; they snap to the
+  nearest peak) and categorise a curve as CR / NR / INC (clear response / no response / inconclusive; keys **6–8**).
+  Drag a label to move it, or select it and nudge it with the ◄ ► buttons or arrow keys (Shift = bigger steps);
+  Delete or a right-click removes a label.
+- **Analysis:** read latencies and interpeak intervals from the labels; drag curves
   up and down by their tags; merge curves (weighted average, can be unmerged) or add them (keeps the originals);
   export a waveform as CSV; print a report.
 - **Patients:** adult or child (age in months), quiet asleep or noisy awake, 4-point air- and bone-conduction

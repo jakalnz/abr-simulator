@@ -73,10 +73,19 @@
 
     <div class="tabpane" id="tab-latency" hidden>
       <div class="box">
-        <div class="lbl">Wave to mark (click on the selected curve)</div>
+        <div class="lbl">Labels <span class="hint">keys 1-5 waves, 6-8 category</span></div>
         <div id="waveBtns"></div>
-        <div class="btns"><button id="btnClrMarks">Clear marks on selected</button></div>
-        <div class="hint">Select a curve by clicking it. The marker snaps to the nearest peak.</div>
+        <div id="catBtns"></div>
+        <div class="hint">Click the selected curve to place the armed wave label, or press 1-5 with the pointer over a curve (it snaps to the nearest peak).
+          CR = clear response, NR = no response, INC = inconclusive (6-8 on the selected curve; press again to remove).</div>
+      </div>
+      <div class="box">
+        <div class="lbl">Move a label</div>
+        <div class="hint">Drag a label with the mouse, or click it to select it and use the buttons or the &larr; &rarr; keys (Shift = bigger steps).
+          Delete removes the selected label; right-click a label for remove options.</div>
+        <div id="selInfo" class="lbl" style="margin-top:4px"></div>
+        <div class="btns" id="nudge"><button data-n="-5" title="Back 0.25 ms">&#9668;&#9668;</button><button data-n="-1" title="Back 0.05 ms">&#9668;</button><button data-n="1" title="Forward 0.05 ms">&#9658;</button><button data-n="5" title="Forward 0.25 ms">&#9658;&#9658;</button><button id="btnDelMark" title="Remove the selected label (Delete)">Remove</button></div>
+        <div class="btns" style="margin-top:6px"><button id="btnClrMarks">Clear all labels on selected curve</button></div>
       </div>
     </div>
   </aside>

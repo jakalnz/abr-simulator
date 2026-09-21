@@ -31,6 +31,13 @@ button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #
 #lvlGrid button { padding: 2px 0; }
 #lvlGrid button.on { background: #3b78c9; color: #fff; border-color: #1f4f96; }
 #lvlGrid button:disabled { color: #aaa; background: #f0f0f0; cursor: not-allowed; }
+#catBtns { display: flex; gap: 4px; margin-bottom: 6px; }
+#catBtns button { flex: 1; font-weight: 700; }
+#catBtns button.on[data-c="CR"] { background: #2e8b3a; color: #fff; border-color: #1f6a2a; }
+#catBtns button.on[data-c="NR"] { background: #777; color: #fff; border-color: #555; }
+#catBtns button.on[data-c="INC"] { background: #d08a00; color: #fff; border-color: #9a6600; }
+.kb { font-size: 9px; font-weight: 400; opacity: .65; margin-left: 3px; }
+#nudge button { flex: 1; }
 #waveBtns { display: flex; gap: 4px; margin-bottom: 6px; }
 #waveBtns button { flex: 1; font-weight: 700; }
 #waveBtns button.on { background: #3b78c9; color: #fff; }

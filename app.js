@@ -7,6 +7,9 @@
   const RATES = [7.1, 11.1, 17.1, 27.1, 33.1, 39.1, 65.1, 91.1];
   const NMAX = [500, 1000, 1500, 2000, 3000, 4000];
   const WAVES = ['I', 'II', 'III', 'IV', 'V'];
+  const CATS = ['CR', 'NR', 'INC'];
+  const CAT_COL = { CR: '#2e8b3a', NR: '#777', INC: '#d08a00' };
+  const CAT_NAME = { CR: 'Clear response', NR: 'No response', INC: 'Inconclusive' };
 
   const S = {
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
@@ -15,7 +18,7 @@
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
-    tab: 'record', wave: 'V', nextId: 1
+    tab: 'record', wave: 'V', nextId: 1, selMark: null, hover: null
   };
 
   /* ---------- helpers ---------- */
@@ -174,7 +177,7 @@
     return { W, H, items, slot, plotH, w1, px200: S.zoom * Math.min(40, Math.max(12, slot * 0.3)),
              x: (t) => L_MARGIN + (t - W0) / (w1 - W0) * (W - L_MARGIN - R_MARGIN),
              tOf: (x) => W0 + (x - L_MARGIN) / (W - L_MARGIN - R_MARGIN) * (w1 - W0),
-             base: (i) => T_MARGIN + (i + 0.5) * slot };
+             base: (i) => T_MARGIN + (i + 0.62) * slot };     // baseline below the slot centre: waves I-V rise further than the trough falls
   }
   function draw(cv, ear, forReport) {
     const dpr = window.devicePixelRatio || 1;
@@ -182,7 +185,7 @@
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const lay = layout(cv, ear, forReport); lay.ys = []; lay.tagY = []; cv._lay = lay;
+    const lay = layout(cv, ear, forReport); lay.ys = []; lay.tagY = []; lay.markBoxes = []; lay.catBoxes = []; cv._lay = lay;
     const { x, items, slot, px200 } = lay;
     // grid
     ctx.strokeStyle = '#d3d3d3'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1; ctx.fillStyle = '#444'; ctx.font = '11px Segoe UI'; ctx.textAlign = 'center';
@@ -223,9 +226,22 @@
       // wave marks
       if (!isC) for (const k of WAVES) {
         const tm = t.marks && t.marks[k]; if (tm == null) continue;
-        const idx = Math.round((tm - W0) / DT), yy = ys(d.avg[idx]);
-        ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.moveTo(x(tm), yy - 4); ctx.lineTo(x(tm), yy - 13); ctx.stroke();
-        ctx.fillStyle = '#000'; ctx.textAlign = 'center'; ctx.fillText(k, x(tm), yy - 16);
+        const idx = Math.max(0, Math.min(d.avg.length - 1, Math.round((tm - W0) / DT))), yy = ys(d.avg[idx]);
+        const isSel = !forReport && S.selMark && S.selMark.tr === t && S.selMark.wave === k;
+        ctx.strokeStyle = isSel ? '#d00' : '#000'; ctx.lineWidth = isSel ? 2 : 1;
+        ctx.beginPath(); ctx.moveTo(x(tm), yy - 4); ctx.lineTo(x(tm), yy - 13); ctx.stroke();
+        if (isSel) { ctx.fillStyle = '#d00'; ctx.beginPath(); ctx.moveTo(x(tm), yy - 2); ctx.lineTo(x(tm) - 3.5, yy - 8); ctx.lineTo(x(tm) + 3.5, yy - 8); ctx.fill(); }
+        ctx.fillStyle = isSel ? '#d00' : '#000'; ctx.textAlign = 'center'; ctx.font = (isSel ? 'bold ' : '') + '12px Segoe UI'; ctx.fillText(k, x(tm), yy - 16);
+        ctx.lineWidth = 1; ctx.font = '11px Segoe UI';
+        lay.markBoxes.push({ i, tr: t, wave: k, x: x(tm), y0: yy - 30, y1: yy });
+      }
+      // response category label (CR / NR / INC)
+      if (t.cat && !isC) {
+        const bw = t.cat === 'INC' ? 34 : 26, bx = w - R_MARGIN - bw - 4, by = tagY - 27;
+        ctx.fillStyle = CAT_COL[t.cat]; ctx.fillRect(bx, by, bw, 15);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText(t.cat, bx + bw / 2, by + 11);
+        ctx.font = '11px Segoe UI'; ctx.textAlign = 'left';
+        lay.catBoxes.push({ i, tr: t, x0: bx, x1: bx + bw, y0: by, y1: by + 15 });
       }
     });
     ctx.textAlign = 'left';
@@ -243,7 +259,7 @@
     const rp = t ? Math.round(t.repro * 100) : 0;
     $('stRep').textContent = rp + '%'; $('repBar').style.width = rp + '%';
     $('progFill').style.width = (t ? Math.min(100, t.n / 40) : 0) + '%';     // 0-4000 sweeps
-    renderLat();
+    renderLat(); renderLabelUI();
   }
   function drawEEG() {
     const c = $('eeg'), g = c.getContext('2d'); g.fillStyle = '#111'; g.fillRect(0, 0, c.width, c.height);
@@ -268,15 +284,60 @@
     });
   }
   function renderLat() {
-    const rows = S.traces.filter((t) => Object.keys(t.marks).length);
-    if (!rows.length) { $('lat').innerHTML = '<span class="hint">Latencies (ms): choose the Latency tab, select a curve and click on waves I, III and V.</span>'; return; }
+    const rows = S.traces.filter((t) => Object.keys(t.marks).length || t.cat);
+    if (!rows.length) { $('lat').innerHTML = '<span class="hint">Latencies (ms): choose the Latency tab, select a curve and label waves I, III and V (keys 1-5); categorise with 6-8.</span>'; return; }
     const f = (v) => (v == null ? '' : v.toFixed(2)), dif = (a, b) => (a != null && b != null ? (b - a).toFixed(2) : '');
-    let h = '<table><tr><th>Curve</th><th>Type</th><th>Rate</th>' + WAVES.map((w) => `<th>${w}</th>`).join('') + '<th>I-III</th><th>III-V</th><th>I-V</th></tr>';
+    let h = '<table><tr><th>Curve</th><th>Type</th><th>Rate</th>' + WAVES.map((w) => `<th>${w}</th>`).join('') + '<th>I-III</th><th>III-V</th><th>I-V</th><th>Category</th></tr>';
     for (const t of rows) {
       const m = t.marks;
-      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)}</td><td>${t.stim.rate}</td>${WAVES.map((w) => `<td>${f(m[w])}</td>`).join('')}<td>${dif(m.I, m.III)}</td><td>${dif(m.III, m.V)}</td><td>${dif(m.I, m.V)}</td></tr>`;
+      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)}</td><td>${t.stim.rate}</td>${WAVES.map((w) => `<td>${f(m[w])}</td>`).join('')}<td>${dif(m.I, m.III)}</td><td>${dif(m.III, m.V)}</td><td>${dif(m.I, m.V)}</td><td>${t.cat ? `<b style="color:${CAT_COL[t.cat]}">${t.cat}</b>` : ''}</td></tr>`;
     }
     $('lat').innerHTML = h + '</table>';
+  }
+  /* ---------- labels: wave marks (I-V) and response category (CR/NR/INC) ---------- */
+  const clampT = (tr, t) => Math.max(W0, Math.min(W0 + (tr.ch[0].avg.length - 1) * DT, t));
+  const toSample = (tr, t) => W0 + Math.round((clampT(tr, t) - W0) / DT) * DT;
+  function snapPeak(tr, t) {                       // nearest local maximum of the ipsilateral trace within +/-0.35 ms
+    const arr = tr.ch[0].avg, c = Math.round((t - W0) / DT), half = Math.round(0.35 / DT);
+    let best = Math.max(1, Math.min(arr.length - 2, c));
+    for (let k = Math.max(1, c - half); k <= Math.min(arr.length - 2, c + half); k++) if (arr[k] > arr[best]) best = k;
+    return W0 + best * DT;
+  }
+  function placeMark(tr, wave, t) { tr.marks[wave] = t; S.selMark = { tr, wave }; S.wave = wave; }
+  function curMark() {                             // the selected label, if it still exists
+    const m = S.selMark;
+    if (m && S.traces.includes(m.tr) && m.tr.marks[m.wave] != null) return m;
+    S.selMark = null; return null;
+  }
+  function setCat(tr, c) { if (!tr) { toast('Select a curve first'); return; } tr.cat = tr.cat === c ? null : c; }
+  function nudge(steps) {
+    let m = curMark();
+    if (!m && S.sel && S.sel.marks[S.wave] != null) m = S.selMark = { tr: S.sel, wave: S.wave };
+    if (!m) { toast('Click a label to select it first'); return; }
+    m.tr.marks[m.wave] = toSample(m.tr, m.tr.marks[m.wave] + steps * DT);
+    render();
+  }
+  function removeMark(m) {
+    if (!m) return;
+    delete m.tr.marks[m.wave];
+    if (S.selMark && S.selMark.tr === m.tr && S.selMark.wave === m.wave) S.selMark = null;
+  }
+  function renderLabelUI() {
+    [...$('waveBtns').children].forEach((b) => b.classList.toggle('on', b.dataset.w === S.wave));
+    [...$('catBtns').children].forEach((b) => b.classList.toggle('on', !!S.sel && S.sel.cat === b.dataset.c));
+    const m = curMark();
+    $('selInfo').textContent = m ? `Selected: ${m.wave} on ${m.tr.label} at ${m.tr.marks[m.wave].toFixed(2)} ms` : 'No label selected';
+  }
+  function hitMark(cv, ev) {
+    const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, lay = cv._lay;
+    if (!lay || !lay.markBoxes) return null;
+    let best = null, bd = 1e9;
+    for (const b of lay.markBoxes) { const d = Math.abs(mx - b.x); if (d <= 7 && my >= b.y0 && my <= b.y1 && d < bd) { bd = d; best = b; } }
+    return best;
+  }
+  function hitCat(cv, ev) {
+    const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, lay = cv._lay;
+    return (lay && lay.catBoxes || []).find((b) => mx >= b.x0 && mx <= b.x1 && my >= b.y0 && my <= b.y1) || null;
   }
   function paneClick(cv, ear, ev) {
     const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, lay = cv._lay;
@@ -293,6 +354,12 @@
   function bindDrag(cv, ear) {
     cv.addEventListener('mousedown', (ev) => {
       if (ev.button !== 0) return;
+      const mb = hitMark(cv, ev);
+      if (mb && !mb.tr.live) {                       // grab a wave label to slide it along the curve
+        S.sel = mb.tr; S.selMark = { tr: mb.tr, wave: mb.wave }; S.wave = mb.wave;
+        S.mdrag = { cv, tr: mb.tr, wave: mb.wave, moved: false, x0: ev.clientX };
+        cv.style.cursor = 'ew-resize'; renderList(); render(); ev.preventDefault(); return;
+      }
       const h = paneClick(cv, ear, ev);
       if (!h || !h.onTag || h.it.tr.live) return;
       const tr = h.it.tr; S.sel = tr;
@@ -301,16 +368,25 @@
       cv.style.cursor = 'grabbing'; renderList(); render(); ev.preventDefault();
     });
     cv.addEventListener('mousemove', (ev) => {
-      if (S.drag) return;
+      S.hover = { ear, cv, clientX: ev.clientX, clientY: ev.clientY };
+      if (S.drag || S.mdrag) return;
       const h = paneClick(cv, ear, ev);
-      cv.style.cursor = h && h.onTag && !h.it.tr.live ? 'grab' : 'crosshair';
+      cv.style.cursor = hitMark(cv, ev) ? 'ew-resize' : (h && h.onTag && !h.it.tr.live ? 'grab' : 'crosshair');
     });
+    cv.addEventListener('mouseleave', () => { if (S.hover && S.hover.cv === cv) S.hover = null; });
     cv.addEventListener('dblclick', (ev) => {
       const h = paneClick(cv, ear, ev);
       if (h && h.onTag && h.it.tr.dy) { h.it.tr.dy[h.it.chan] = 0; render(); }
     });
   }
   window.addEventListener('mousemove', (ev) => {
+    const m = S.mdrag;
+    if (m) {
+      if (Math.abs(ev.clientX - m.x0) > 2) m.moved = true;
+      const r = m.cv.getBoundingClientRect();
+      m.tr.marks[m.wave] = toSample(m.tr, m.cv._lay.tOf(ev.clientX - r.left));
+      render(); return;
+    }
     const d = S.drag; if (!d) return;
     const dy = ev.clientY - d.y0;
     if (Math.abs(dy) > 3) d.moved = true;
@@ -318,26 +394,45 @@
     render();
   });
   window.addEventListener('mouseup', () => {
+    const m = S.mdrag;
+    if (m) { m.cv.style.cursor = 'crosshair'; S.dragMoved = m.moved; S.mdrag = null; setTimeout(() => (S.dragMoved = false), 0); return; }
     const d = S.drag; if (!d) return;
     d.cv.style.cursor = 'grab'; S.dragMoved = d.moved; S.drag = null;
     setTimeout(() => (S.dragMoved = false), 0);
   });
   function onClick(cv, ear, ev) {
     if (S.dragMoved) return;
+    const mb = hitMark(cv, ev);
+    if (mb && !mb.tr.live) { S.sel = mb.tr; S.selMark = { tr: mb.tr, wave: mb.wave }; S.wave = mb.wave; renderList(); render(); return; }
+    const cb = hitCat(cv, ev);
+    if (cb) { S.sel = cb.tr; renderList(); render(); return; }
     const h = paneClick(cv, ear, ev); if (!h) return;
     const tr = h.it.tr;
     if (tr.live) return;
     if (h.onTag) S.sel = tr;
-    else if (S.tab === 'latency' && S.sel === tr && h.it.chan === 0) {
-      const arr = tr.ch[0].avg, c = Math.round((h.t - W0) / DT), half = Math.round(0.35 / DT);
-      let best = c;
-      for (let k = Math.max(1, c - half); k <= Math.min(arr.length - 2, c + half); k++) if (arr[k] > arr[best]) best = k;
-      tr.marks[S.wave] = W0 + best * DT;
-    } else S.sel = tr;
+    else if (S.tab === 'latency' && S.sel === tr && h.it.chan === 0) placeMark(tr, S.wave, snapPeak(tr, h.t));
+    else S.sel = tr;
     renderList(); render();
+  }
+  function openCtx(ev, items) {
+    const c = $('ctx'); c.innerHTML = '';
+    items.forEach(([txt, fn]) => { const d = document.createElement('div'); d.textContent = txt; d.onclick = () => { c.hidden = true; fn(); renderList(); render(); }; c.appendChild(d); });
+    c.style.left = ev.clientX + 'px'; c.style.top = ev.clientY + 'px'; c.hidden = false;
   }
   function onContext(cv, ear, ev) {
     ev.preventDefault();
+    const mb = hitMark(cv, ev);
+    if (mb && !mb.tr.live) {
+      S.sel = mb.tr; S.selMark = { tr: mb.tr, wave: mb.wave }; render(); renderList();
+      openCtx(ev, [[`Remove label ${mb.wave}`, () => removeMark(mb)], [`Clear all labels on ${mb.tr.label}`, () => { mb.tr.marks = {}; mb.tr.cat = null; S.selMark = null; }]]);
+      return;
+    }
+    const cb = hitCat(cv, ev);
+    if (cb) {
+      S.sel = cb.tr; render(); renderList();
+      openCtx(ev, [[`Remove ${cb.tr.cat} label`, () => (cb.tr.cat = null)], ...CATS.filter((c) => c !== cb.tr.cat).map((c) => [`Change to ${c} (${CAT_NAME[c].toLowerCase()})`, () => (cb.tr.cat = c)])]);
+      return;
+    }
     const h = paneClick(cv, ear, ev); if (!h || h.it.tr.live) return;
     const tr = h.it.tr, prev = S.sel;
     const pair = prev && prev !== tr && prev.ear === tr.ear && !prev.live;   // combine 'prev' (selected) with 'tr'
@@ -352,7 +447,9 @@
     if (tr.parts) add('Unmerge', () => unmerge(tr));
     add(tr.hidden ? 'Show' : 'Hide', () => (tr.hidden = !tr.hidden));
     add(S.chan === 'both' ? 'Ipsilateral only' : 'Show contralateral (Ipsi / Contra)', () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; syncUI(); });
-    add('Clear marks', () => (tr.marks = {}));
+    if (Object.keys(tr.marks).length) add('Remove wave labels', () => { tr.marks = {}; if (S.selMark && S.selMark.tr === tr) S.selMark = null; });
+    if (tr.cat) add(`Remove ${tr.cat} label`, () => (tr.cat = null));
+    else CATS.forEach((c) => add(`Label ${c} (${CAT_NAME[c].toLowerCase()})`, () => (tr.cat = c)));
     add('Reset position', () => (tr.dy = [0, 0]));
     add('Export waveform (CSV)', () => exportCsv(tr));
     add('Delete', () => { S.traces = S.traces.filter((t) => t !== tr); S.sel = null; });
@@ -511,8 +608,26 @@
   /* ---------- wiring ---------- */
   function init() {
     fill($('rate'), RATES, 17.1, (v) => v.toFixed(1)); fill($('nmax'), NMAX, 2000);
-    $('waveBtns').innerHTML = WAVES.map((w) => `<button data-w="${w}" class="${w === S.wave ? 'on' : ''}">${w}</button>`).join('');
-    $('waveBtns').onclick = (e) => { if (e.target.dataset.w) { S.wave = e.target.dataset.w; [...$('waveBtns').children].forEach((b) => b.classList.toggle('on', b.dataset.w === S.wave)); } };
+    $('waveBtns').innerHTML = WAVES.map((w, i) => `<button data-w="${w}" title="Key ${i + 1}" class="${w === S.wave ? 'on' : ''}">${w}<span class="kb">${i + 1}</span></button>`).join('');
+    $('waveBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) { S.wave = b.dataset.w; renderLabelUI(); } };
+    $('catBtns').innerHTML = CATS.map((c, i) => `<button data-c="${c}" title="${CAT_NAME[c]} (key ${i + 6})">${c}<span class="kb">${i + 6}</span></button>`).join('');
+    $('catBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) { setCat(S.sel, b.dataset.c); render(); } };
+    $('nudge').onclick = (e) => { const b = e.target.closest('button[data-n]'); if (b) nudge(+b.dataset.n); };
+    $('btnDelMark').onclick = () => { const m = curMark(); if (m) { removeMark(m); render(); } else toast('Click a label to select it first'); };
+    document.addEventListener('keydown', (e) => {
+      const tg = e.target && e.target.tagName;
+      if (tg === 'INPUT' || tg === 'SELECT' || tg === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!$('mPatient').hidden || !$('mReport').hidden) return;
+      const k = e.key;
+      if (k >= '1' && k <= '5') {                     // 1-5: arm wave I-V; with the pointer over a curve, place it there
+        S.wave = WAVES[+k - 1];
+        const hv = S.hover, h = hv && !S.acq ? paneClick(hv.cv, hv.ear, hv) : null;
+        if (h && !h.onTag && !h.it.tr.live && h.it.chan === 0) { S.sel = h.it.tr; placeMark(h.it.tr, S.wave, snapPeak(h.it.tr, h.t)); renderList(); }
+        render(); e.preventDefault();
+      } else if (k === '6' || k === '7' || k === '8') { setCat(S.sel, CATS[+k - 6]); render(); e.preventDefault(); }
+      else if (k === 'ArrowLeft' || k === 'ArrowRight') { if (curMark() || (S.sel && S.sel.marks[S.wave] != null)) { nudge((k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 1)); e.preventDefault(); } }
+      else if (k === 'Delete' || k === 'Backspace') { const m = curMark(); if (m) { removeMark(m); render(); e.preventDefault(); } }
+    });
     document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => {
       S.tab = b.dataset.tab;
       document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === b));
@@ -537,7 +652,7 @@
     $('zoomUp').onclick = () => { S.zoom *= 1.25; render(); }; $('zoomDn').onclick = () => { S.zoom /= 1.25; render(); };
     $('btnDel').onclick = () => { if (S.sel) { S.traces = S.traces.filter((t) => t !== S.sel); S.sel = null; renderList(); render(); } };
     $('btnClear').onclick = () => { S.traces = []; S.sel = null; renderList(); render(); };
-    $('btnClrMarks').onclick = () => { if (S.sel) { S.sel.marks = {}; render(); } };
+    $('btnClrMarks').onclick = () => { if (S.sel) { S.sel.marks = {}; S.sel.cat = null; S.selMark = null; render(); } };
     $('btnUnmerge').onclick = () => { if (S.sel && S.sel.parts) { unmerge(S.sel); renderList(); render(); } else toast('Select a merged curve first'); };
     for (let i = 0; i < 9; i++) { const b = document.createElement('button'); b.textContent = i + 1; b.onclick = () => switchPage(i); $('pageBtns').appendChild(b); }
     $('btnResetPos').onclick = () => { S.traces.forEach((t) => (t.dy = [0, 0])); render(); };
