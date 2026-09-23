@@ -52,7 +52,10 @@ Literature anchors (do not change casually — each constant is fitted to a sour
   (normal ears, 30-3000 Hz, alternating): infant V-V' ~80/140/185 nV at 2 kHz 25/45/65 dB nHL, ~100/160/210 nV at
   500 Hz 35/45/55, ~130 nV at 4 kHz 45, BC 2 kHz 45 dB ~190 nV (Stapells & Ruben 1989: 0.18-0.25 uV). With RN ~17 nV
   (30% noise, 2000 sweeps) detection still matches Stapells 1995 (2 kHz visual threshold ~15 dB nHL, mean confidence
-  ~99% at 30 dB). Re-run a detection sweep if any of these change.
+  ~99% at 30 dB). 500 Hz is now slightly larger than 2 kHz well above threshold (158 vs 139 nV at 45 dB nHL, as in the
+  printouts) but still less detectable near threshold (mean confidence at 25 dB: 500 Hz ~57%, 2 kHz ~95%). Re-run a
+  detection sweep if any of these change. Uncancelled BC 500 Hz artefact at 50 dB nHL drives Fmp/confidence to ~100%
+  even with no cochlear response (BCEHP 2022 warns RN/SNR are unreliable with artefact).
 - CM (`CM_GAIN`, `cmGrowth`): linear to 70 dB, compressive above (0.5 dB/dB); Large ~0.35-0.4 uV at 90 dB after
   filtering, as in clinical ANSD click printouts. `ear.ring` gives a ringing CM (~1.5 kHz, tau 1.3 ms, visible to
   ~4 ms). The stimulus artefact is electrical (t = 0, no tube delay), so `stim.clamped` (no sound to either cochlea)
@@ -62,7 +65,8 @@ Literature anchors (do not change casually — each constant is fitted to a sour
   PAM (`ear.pam`) is a myogenic 9-12 ms hump (adult, AC). `normalLI()` gives model-derived normal L-I bands
   (+/- 2 SD, V SD from Gorga 1989 Table 2).
 - Wave I level-latency (checked Sep 2026): clean wave I 1.65 / 1.90 / 2.35 / 2.65 / 3.10 ms at 80 / 60 / 40 / 30 / 20 dB
-  (adult), noise scatter of picks SD 0.04-0.18 ms. The apparent jumps at >= 90 dB came from an uncapped CM swamping
+  (adult; Gorga 1989 has wave I only at 80 dB: 1.59 ms). Wave I is <= 45 nV at <= 30 dB, i.e. near a typical residual
+  noise, so it is not reliably identifiable there and picks wander. The apparent jumps at >= 90 dB came from an uncapped CM swamping
   wave I (fixed by `cmGrowth`). I-V widens ~0.5 ms from 80 to 40 dB because `WV.I.D` < `WV.V.D`; left unchanged for
   lack of a multi-level wave I source.
 - Reference printouts in `ABR Images/` are cited only generically ("clinical printouts"); never name them.
