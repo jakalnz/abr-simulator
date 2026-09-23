@@ -185,7 +185,7 @@
              base: (i) => T_MARGIN + (i + 0.62) * slot };     // baseline below the slot centre: waves I-V rise further than the trough falls
   }
   function draw(cv, ear, forReport) {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = forReport ? 2 : window.devicePixelRatio || 1;     // report canvases at 2x so the printout stays sharp
     const w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -208,7 +208,7 @@
     const drawOrder = items.map((_, i) => i).sort((a, b) => (items[a].tr === S.sel && !forReport) - (items[b].tr === S.sel && !forReport));
     drawOrder.forEach((i) => {
       const it = items[i];
-      const t = it.tr, d = t.ch[it.chan], base = lay.base(it.slot) + ((t.dy && t.dy[it.chan]) || 0);
+      const t = it.tr, d = t.ch[it.chan], base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);   // report ignores manual offsets so no curve leaves the plot
       const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
       lay.ys[i] = base; lay.tagY[i] = tagY;
       const sel = S.sel === t && !forReport, isC = it.chan === 1;
@@ -693,16 +693,25 @@
 
   /* ---------- report ---------- */
   function openReport() {
-    const rows = S.traces.filter((t) => !t.hidden);
-    let h = `<div class="rep-head"><div><h2>ABR report &mdash; page ${S.page + 1}</h2><div>${S.patient.name} &mdash; ${S.patient.adult ? 'Adult' : 'Child ' + S.patient.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
-      <div class="rep-graphs"><canvas id="rc0"></canvas><canvas id="rc1"></canvas></div><h3>Recordings</h3>
-      <table><tr><th>Curve</th><th>Stimulus</th><th>Transducer</th><th>Recorded / rejected</th><th>Wave repro</th><th>Rate</th><th>Polarity</th><th>HPF / LPF</th><th>RN</th></tr>`;
-    for (const t of rows) h += `<tr><td>${t.label}</td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}</td><td>${t.n} / ${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td><td>${t.rn.toFixed(0)} nV</td></tr>`;
-    h += '</table><h3>Latencies (ms)</h3><div id="repLat"></div>';
+    const rows = S.traces.filter((t) => !t.hidden), p = S.patient;
+    // graph height grows with the number of curve slots so every curve is printed
+    const slots = Math.max(paneItems(0, 'x').nSlots || 1, paneItems(1, 'x').nSlots || 1);
+    const gh = Math.min(1000, Math.max(380, slots * 55 + 60));
+    let h = `<div class="rep-head"><div><h2>ABR report &mdash; page ${S.page + 1}</h2><div>${p.name} &mdash; ${p.adult ? 'Adult' : 'Child ' + p.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
+      <div class="rep-graphs"><div><div class="ptitle r">Right ear</div><canvas id="rc0" style="height:${gh}px"></canvas></div><div><div class="ptitle l">Left ear</div><canvas id="rc1" style="height:${gh}px"></canvas></div></div>
+      <div class="rep-sec"><h3>Recordings</h3>
+      <table><tr><th>Curve</th><th>Stimulus</th><th>Transducer</th><th>Rate (/s)</th><th>Polarity</th><th>HPF / LPF (Hz)</th><th>Recorded</th><th>Rejected</th><th>Wave repro</th><th>Fmp</th><th>Response confidence</th><th>Residual noise</th></tr>`;
+    for (const t of rows) {
+      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}${t.stim.clamped ? ' (clamped)' : ''}</td>` +
+        `<td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td>` +
+        `<td>${t.n}</td><td>${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.fmp ? t.fmp.toFixed(1) : '--'}</td><td>${t.n ? t.conf.toFixed(1) + '%' : '--'}</td><td>${t.rn ? t.rn.toFixed(0) + ' nV' : '--'}</td></tr>`;
+    }
+    const li = liChartsHTML('rli');
+    h += `</table></div><div class="rep-sec"><h3>Latencies (ms)</h3>${latTableHTML(markedRows())}</div>
+      <div class="rep-sec"><h3>Latency&ndash;intensity</h3>${li.html}</div>`;
     $('reportBody').innerHTML = h;
-    $('repLat').innerHTML = latTableHTML(markedRows());
     $('mReport').hidden = false;
-    requestAnimationFrame(() => { draw($('rc0'), 0, 'x'); draw($('rc1'), 1, 'x'); });
+    requestAnimationFrame(() => { draw($('rc0'), 0, 'x'); draw($('rc1'), 1, 'x'); li.gs.forEach((g, i) => drawLI($('rli' + i), g, 2)); });
   }
 
   /* ---------- wiring ---------- */

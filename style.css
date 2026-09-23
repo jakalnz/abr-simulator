@@ -81,8 +81,22 @@ table.lat th, #reportBody th { background: #eee; }
 #pPath .earblk h4 { grid-column: 1/-1; margin: 0; }
 #pPath label { display: flex; flex-direction: column; font-size: 11px; }
 #reportBody .rep-head { display: flex; justify-content: space-between; border-bottom: 2px solid #333; margin-bottom: 8px; }
-#reportBody .rep-graphs { display: flex; gap: 8px; } #reportBody canvas { width: 50%; height: 380px; border: 1px solid #aaa; }
-@media print { body * { visibility: hidden; } #mReport, #mReport * { visibility: visible; } #mReport { position: absolute; inset: 0; background: #fff; padding: 0; } .noprint { display: none !important; } }
+#reportBody .rep-graphs { display: flex; gap: 8px; } #reportBody .rep-graphs > div { width: 50%; border: 1px solid #aaa; }
+#reportBody .rep-graphs canvas { width: 100%; display: block; }
+#reportBody .li-charts { grid-template-columns: 1fr 1fr; }
+#reportBody .li-charts canvas { height: 300px; }
+/* print: only the report, flowing over as many pages as needed (the old visibility:hidden + absolute inset:0 clipped it to one page) */
+@page { size: A4; margin: 10mm; }
+@media print {
+  html, body { height: auto; display: block; background: #fff; }
+  body > *:not(#mReport) { display: none !important; }
+  #mReport { position: static; display: block; overflow: visible; padding: 0; background: #fff; }
+  #mReport .mbox { width: auto; border: 0; padding: 0; background: #fff; }
+  .noprint { display: none !important; }
+  .rep-graphs, .li-charts canvas, #reportBody tr { break-inside: avoid; }
+  #reportBody h3 { break-after: avoid; }
+  #reportBody table { font-size: 10px; }
+}
 @media (max-width: 900px) { #main { flex-direction: column; } #left { width: 100%; } #graphs { flex-direction: column; } }
 
 .lockbar { display: flex; gap: 6px; align-items: center; background: #fff; border: 1px solid #ccc; padding: 4px 8px; margin-bottom: 8px; }
