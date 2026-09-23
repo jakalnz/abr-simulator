@@ -539,10 +539,12 @@
       <label>Severity<select data-p="sev" data-e="${e}">${SEVS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
       <label>Cochlear microphonic<select data-p="cm" data-e="${e}">${CMS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
       <label>CM type<select data-p="ring" data-e="${e}"><option value="0">Brief</option><option value="1">Ringing (ANSD-type)</option></select></label>
+      <label>Click morphology<select data-p="morph" data-e="${e}">${M.MORPH_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
+      <label>PAM (muscle) wave<select data-p="pam" data-e="${e}"><option value="0">Off</option><option value="1">Small</option><option value="2">Large</option></select></label>
       <label>Wave I (ms)<input type="number" step="0.05" data-p="latI" data-e="${e}" placeholder="auto"></label>
       <label>Wave III (ms)<input type="number" step="0.05" data-p="latIII" data-e="${e}" placeholder="auto"></label>
       <label>Wave V (ms)<input type="number" step="0.05" data-p="latV" data-e="${e}" placeholder="auto"></label></div>`).join('') +
-      '<div class="hint">Latencies apply at 80 dB nHL, 17.1/s, rarefaction, insert phones. Leave blank for the model default (adjusted for age, pathology, thresholds).</div>';
+      '<div class="hint">Latencies apply at 80 dB nHL, 17.1/s, rarefaction, insert phones. Leave blank for the model default (adjusted for age, pathology, thresholds). Click morphology varies waves II-V (IV/V complex); PAM adds a post-auricular muscle wave at ~10-12 ms (adults, insert phones).</div>';
   }
   function fillPatientModal() {
     const p = S.patient;

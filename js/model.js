@@ -46,6 +46,18 @@
     IV:  { A: 0.14, p: 0.85, D: 3.9, su: 0.28, tr: [0.1, 0.6, 0.5],    cg: 1.0,  cd: 0.1 },
     V:   { A: 0.85, p: 0.7,  D: 4.2, su: 0.30, tr: [0.9, 0.9, 0.55], cg: 0.65, cd: 0.3 }
   };
+  /* Click morphology variants (per ear, a case setting). Multipliers on each wave's amplitude (a) and width (w), plus a
+   * latency shift (dt, ms). Shapes follow the range seen in clinical adult click printouts (80 dB nHL, 100-3000 Hz):
+   * a small II and a IV shoulder on V (standard); IV and V as separate peaks; a broad fused IV/V complex; IV larger with V
+   * as a shoulder on its down-slope; III larger than V. calibrate() runs on Standard, so I/III/V sit on TARGET there. */
+  const MORPH = [
+    { II: { a: 2.4, w: 0.8 }, IV: { a: 3.4, dt: -0.15, w: 0.7 } },                                    // 0 Standard
+    { II: { a: 3.2, w: 0.7 }, IV: { a: 3.4, dt: -0.3, w: 0.6 }, V: { w: 0.8 } },                         // 1 Separate IV and V
+    { II: { a: 1.5 }, IV: { a: 5.5, dt: 0.12, w: 0.75 }, V: { a: 0.72, dt: 0.05, w: 0.8 } },         // 2 Fused IV/V complex
+    { II: { a: 2 }, IV: { a: 6, dt: -0.1, w: 0.8 }, V: { a: 0.5, dt: 0.15, w: 0.85 } },                  // 3 IV dominant, V shoulder
+    { II: { a: 2 }, III: { a: 1.8, w: 0.9 }, IV: { a: 1.5 }, V: { a: 0.55 } }                            // 4 Large III, small V
+  ];
+  const MORPH_NAMES = ['Standard', 'Separate IV and V', 'Fused IV/V complex', 'IV dominant (V shoulder)', 'Large III, small V'];
   const TARGET = { I: 1.66, III: 3.82, V: 5.75 };       // Kelly (1996) adult, 80 dB nHL, 17.1/s, insert
   const OFFSET = { I: 0, II: 0, III: 0, IV: 0, V: 0 };  // set by calibrate()
   const TAU_A = 25, TAU_D = 38;
@@ -223,6 +235,7 @@
     const retroS = ear.path === 1 ? RETRO_S[ear.sev] : 0;
     const ansdD = ear.path === 2 ? ANSD_D[ear.sev] : 0;
 
+    const morph = f ? {} : (MORPH[ear.morph] || MORPH[0]);
     for (let ci = 0; ci < CH_CF.length; ci++) {
       const E = excitation(inp, stim, ci, ear);
       if (E <= 0) continue;
@@ -249,17 +262,20 @@
           if (retroS > 1.2 && k !== 'I' && k !== 'II') amp *= 0.15;
         }
         if (ansdD) amp *= Math.pow(1 - ansdD, 1.5);
+        const mo = morph[k] || {};
+        if (mo.a) amp *= mo.a;
         // timing
         let mu = (f ? toneLatency(f, Ee, k) : OFFSET[k] + tw(CH_CF[ci]) + W.D * Math.exp(-Ee / TAU_D))
                + ageShift(p, k) + pathShift(ear, k) + overrideShift(p, c, k) + tubeShift
                + (ipsi ? 0 : W.cd)
                + rf * { I: 0.10, II: 0.13, III: 0.20, IV: 0.28, V: 0.35 }[k] * (1 + 1.5 * retroS)
-               + (cond ? 0.06 : 0);
+               + (cond ? 0.06 : 0) + (mo.dt || 0);
         // Tone bursts: the response is spread in time by the burst itself, so the V-V' complex is broad and slow at low
         // frequencies (~1 ms sigma at 0.5 kHz, ~0.25 ms at 2 kHz) and the trough after V is later and wider.
         const senv = f ? 0.5 * 1000 / f : 0;
-        const su = Math.sqrt(W.su * W.su + jit * jit + senv * senv);
-        const h = amp * (f ? Math.sqrt(W.su / su) : W.su / su);
+        const su0 = W.su * (mo.w || 1);
+        const su = Math.sqrt(su0 * su0 + jit * jit + senv * senv);
+        const h = amp * (f ? Math.sqrt(su0 / su) : su0 / su);
         const kf = f ? 1 + 3 * senv : 1;
         const trb = W.tr[0] * (f ? 0.7 : 1), trd = W.tr[1] * kf, trs = W.tr[2] * kf;
         const lo = Math.max(0, Math.floor((mu - 4 * su - TS0) / DT));
@@ -339,6 +355,23 @@
     return sig;
   }
 
+  /* Post-auricular muscle (PAM) reflex: a large slow wave at ~9-12 ms picked up by the mastoid electrode, seen in some adult
+   * click printouts (80 dB nHL, 100-3000 Hz) as a hump of 0.2-0.6 uV peaking ~10-11 ms with a sharp negativity after it.
+   * Myogenic, so it does not invert with polarity, grows with level above ~40 dB SL and with muscle tension (noisy state).
+   * Recorded mainly by the channel whose ear has it (ear.pam 0 off, 1 small, 2 large); adults only; AC only. */
+  const PAM_GAIN = [0, 0.22, 0.5];
+  function pamResponse(p, stim, e) {
+    const sig = new Float64Array(NS);
+    const g = PAM_GAIN[p.ears[e].pam] || 0;
+    if (!g || !p.adult || stim.transducer === 'bone' || stim.clamped) return sig;
+    const sl = stim.level - clickThr(p.ears[stim.ear].ac, ABR_CORR_AC);
+    const amp = g * clamp((sl - 30) / 40, 0, 1) * (p.noisy ? 1.5 : 1) * (e === stim.ear ? 1 : 0.6);
+    if (amp < 1e-4) return sig;
+    const t1 = 10.2 + (stim.freq ? 0.5 * 1000 / stim.freq : 0) + 0.02 * Math.max(0, 80 - stim.level);
+    for (let i = 0; i < NS; i++) { const t = TS0 + i * DT; sig[i] += amp * (gauss(t, t1, 0.75) - 0.7 * gauss(t, t1 + 2.4, 0.6)); }
+    return sig;
+  }
+
   /* ---------- filters (zero-phase) ---------- */
   function hp1(x, fc) {
     const rc = 1 / (2 * Math.PI * fc), dt = 1 / FS, a = rc / (rc + dt);
@@ -382,8 +415,8 @@
         const cm = cmResponse(p, stim, c, c === e);
         for (let i = 0; i < NS; i++) s[i] += cm[i];
       }
-      const art = artifact(stim, e === stim.ear);
-      for (let i = 0; i < NS; i++) s[i] += art[i];
+      const art = artifact(stim, e === stim.ear), pam = pamResponse(p, stim, e);
+      for (let i = 0; i < NS; i++) s[i] += art[i] + pam[i];
       return crop(filt(s, hp, lp), nwFor(stim));
     });
     return { ipsi: chan[stim.ear], contra: chan[1 - stim.ear] };
@@ -558,7 +591,7 @@
 
   root.ABRModel = {
     FS, DT, W0, W1, NW, W1_TONE, nwFor, FREQS, CH_CF, WAVES, MAX_LEVEL, TARGET, INTERAURAL_ATT_INSERT,
-    newPatient, newEar, simulate, Acquisition, thrNHL, clickThr, clickHL, ABR_CORR_AC, ABR_CORR_BC, ABR_BASE,
+    MORPH_NAMES, newPatient, newEar, simulate, Acquisition, thrNHL, clickThr, clickHL, ABR_CORR_AC, ABR_CORR_BC, ABR_BASE,
     nominalLatency, toneLatency, OFFSET
   };
   if (typeof module !== 'undefined') module.exports = root.ABRModel;
