@@ -1,5 +1,5 @@
 /* Built-in teaching cases (fictional). ac/bc = dB HL at 0.5, 1, 2, 4 kHz.
- * path: 0 none, 1 retrocochlear, 2 neuropathy (ANSD); sev 0-3; cm 0 absent .. 3 large;
+ * path: 0 none, 1 retrocochlear, 2 neuropathy (ANSD); sev 0-3; cm 0 absent .. 3 large; ring 1 = ringing CM;
  * latI/latIII/latV = optional manual latency (ms) at 80 dB nHL, 17.1/s. */
 window.DEFAULT_PATIENTS = [
   { name: 'Normal hearing adult (asleep/quiet)', adult: true, ageMonths: 0, noisy: false,
@@ -17,6 +17,6 @@ window.DEFAULT_PATIENTS = [
   { name: 'Child 4 y - restless, normal', adult: false, ageMonths: 48, noisy: true,
     ears: [{ ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }, { ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }] },
   { name: 'Baby 5 mo - auditory neuropathy (CM present)', adult: false, ageMonths: 5, noisy: false,
-    ears: [{ ac: [60, 55, 50, 55], bc: [55, 50, 45, 50], path: 2, sev: 3, cm: 3 },
-           { ac: [60, 60, 55, 55], bc: [55, 55, 50, 50], path: 2, sev: 3, cm: 3 }] }
+    ears: [{ ac: [60, 55, 50, 55], bc: [55, 50, 45, 50], path: 2, sev: 3, cm: 3, ring: 1 },
+           { ac: [60, 60, 55, 55], bc: [55, 55, 50, 50], path: 2, sev: 3, cm: 3, ring: 1 }] }
 ];

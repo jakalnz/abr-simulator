@@ -39,9 +39,11 @@
   const WAVES = ['I', 'II', 'III', 'IV', 'V'];
   // amplitude (uV at saturation), compression exponent, level-latency growth (ms), width (ms),
   // trough (rel. depth, delay ms, width ms), contralateral gain & delay
+  // wave I level-latency (D) fitted to Kelly 1996 insert norms: I 1.82 / 1.66 / 1.59 ms at 70 / 80 / 90 dB nHL with I-V
+  // constant (4.06 / 4.04 / 4.06); D 2.5 had I-V shrinking 4.20 -> 4.05 over the same range. II moves with I.
   const WV = {
-    I:   { A: 0.45, p: 1.35, D: 2.5, su: 0.18, tr: [0.25, 0.50, 0.35], cg: 0.05, cd: 0.0 },
-    II:  { A: 0.09, p: 1.2,  D: 2.8, su: 0.20, tr: [0.2, 0.5, 0.4],    cg: 0.30, cd: 0.1 },
+    I:   { A: 0.45, p: 1.35, D: 3.5, su: 0.18, tr: [0.25, 0.50, 0.35], cg: 0.05, cd: 0.0 },
+    II:  { A: 0.09, p: 1.2,  D: 3.6, su: 0.20, tr: [0.2, 0.5, 0.4],    cg: 0.30, cd: 0.1 },
     III: { A: 0.42, p: 1.0,  D: 3.4, su: 0.26, tr: [0.3, 0.6, 0.45],  cg: 0.55, cd: 0.15 },
     IV:  { A: 0.14, p: 0.85, D: 3.9, su: 0.28, tr: [0.1, 0.6, 0.5],    cg: 1.0,  cd: 0.1 },
     V:   { A: 0.85, p: 0.7,  D: 4.2, su: 0.30, tr: [0.9, 0.9, 0.55], cg: 0.65, cd: 0.3 }

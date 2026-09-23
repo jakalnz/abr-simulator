@@ -64,11 +64,11 @@ Literature anchors (do not change casually — each constant is fitted to a sour
 - Click morphology (`MORPH`, per ear `morph` 0-4) scales/shifts waves II-V; `calibrate()` runs on Standard (0).
   PAM (`ear.pam`) is a myogenic 9-12 ms hump (adult, AC). `normalLI()` gives model-derived normal L-I bands
   (+/- 2 SD, V SD from Gorga 1989 Table 2).
-- Wave I level-latency (checked Sep 2026): clean wave I 1.65 / 1.90 / 2.35 / 2.65 / 3.10 ms at 80 / 60 / 40 / 30 / 20 dB
-  (adult; Gorga 1989 has wave I only at 80 dB: 1.59 ms). Wave I is <= 45 nV at <= 30 dB, i.e. near a typical residual
+- Wave I level-latency: `WV.I.D` = 3.5 (II 3.6) fitted to Kelly 1996 (NZAS guideline, insert, rarefaction, 17.1/s):
+  I 1.82 / 1.66 / 1.59, III 3.92 / 3.82 / 3.69, V 5.87 / 5.75 / 5.65 ms at 70 / 80 / 90 dB nHL, I-V ~4.05 at all three.
+  Model: I 1.80 / 1.65 / 1.55, I-V 4.10 at 70-90 dB; clean I 2.00 / 2.65 / 3.45 ms at 60 / 40 / 20 dB. Wave I is <= 45 nV at <= 30 dB, i.e. near a typical residual
   noise, so it is not reliably identifiable there and picks wander. The apparent jumps at >= 90 dB came from an uncapped CM swamping
-  wave I (fixed by `cmGrowth`). I-V widens ~0.5 ms from 80 to 40 dB because `WV.I.D` < `WV.V.D`; left unchanged for
-  lack of a multi-level wave I source.
+  wave I (fixed by `cmGrowth`).
 - Reference printouts in `ABR Images/` are cited only generically ("clinical printouts"); never name them.
 - Click and tone-burst thresholds use different code paths; click thresholds (`ABR_CORR_AC`, `ABR_BASE`) were
   tuned together with the click level series — re-check both if you change one.
