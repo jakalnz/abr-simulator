@@ -51,7 +51,7 @@ button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #
 #strip .conf b.ok { color: #1a8a2a; }
 #prog { flex: 1; min-width: 120px; height: 10px; border: 1px solid #999; background: #eee; }
 #progFill { height: 100%; width: 0; background: #2fa84f; }
-#eeg { background: #111; border: 1px solid #555; }
+#eeg { background: #fff; border: 1px solid #c8c8c8; }
 #graphs { display: flex; gap: 6px; flex: 1; min-height: 300px; }
 .pane { flex: 1; display: flex; flex-direction: column; background: #fff; border: 1px solid #c8c8c8; min-width: 0; }
 .ptitle { padding: 2px 8px; font-weight: 600; border-bottom: 1px solid #ddd; }

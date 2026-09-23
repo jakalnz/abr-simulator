@@ -262,15 +262,19 @@
     $('progFill').style.width = (t ? Math.min(100, t.n / 40) : 0) + '%';     // 0-4000 sweeps
     renderLat(); renderLabelUI();
   }
-  function drawEEG() {
-    const c = $('eeg'), g = c.getContext('2d'); g.fillStyle = '#111'; g.fillRect(0, 0, c.width, c.height);
+  function drawEEG() {                   // raw EEG monitor: light background to match the panels, traces in the ear colours
+    const c = $('eeg'), g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = '#e4e4e4'; g.lineWidth = 1; g.beginPath();
+    for (let x = 20; x < c.width; x += 20) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, c.height); }
+    [12, 32].forEach((y) => { g.moveTo(0, y + 0.5); g.lineTo(c.width, y + 0.5); });
+    g.stroke();
     const amp = (S.patient.noisy ? 11 : 3) * (S.acq ? 1 : 0.6);
-    ['#f55', '#59f'].forEach((col, k) => {
+    ['#8b1414', '#1a1a9c'].forEach((col, k) => {
       g.strokeStyle = col; g.beginPath(); let y = 0;
       for (let i = 0; i < c.width; i += 2) { y = 0.8 * y + 0.6 * (Math.random() - 0.5) * 2; const py = 12 + k * 20 + y * amp * 0.9; i ? g.lineTo(i, py) : g.moveTo(i, py); }
       g.stroke();
     });
-    g.fillStyle = '#aaa'; g.font = '9px Segoe UI'; g.fillText('R', 2, 10); g.fillText('L', 2, 30); g.fillText('±40µV', 180, 40);
+    g.fillStyle = '#555'; g.font = '9px Segoe UI'; g.fillText('R', 2, 10); g.fillText('L', 2, 30); g.fillText('±40µV', 180, 40);
   }
 
   /* ---------- traces, latency ---------- */
