@@ -3,7 +3,7 @@
  */
 (function (root) {
   'use strict';
-  const VERSION = 2;                     // v2 adds the EEG-noise level; v1 links still decode (noise 30%)
+  const VERSION = 3;                     // v2 adds the EEG-noise level (v1: 30%); v3 adds per-ear CM type, click morphology and PAM (older: 0)
   const NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1, 1.5, 2];
 
   class BitWriter {
@@ -34,6 +34,7 @@
       for (const v of e.bc) w.write(v / 5 + 1, 5);
       w.write(e.path, 2); w.write(e.sev, 2); w.write(e.cm, 2);
       for (const l of [e.latI, e.latIII, e.latV]) { w.write(l == null ? 0 : 1, 1); w.write((l || 0) * 20, 8); }
+      w.write(e.ring || 0, 1); w.write(e.morph || 0, 3); w.write(e.pam || 0, 2);
     }
     const name = new TextEncoder().encode((p.name || '').slice(0, 60));
     const head = w.bytes();
@@ -46,7 +47,7 @@
     const bytes = unb64(str);
     const r = new BitReader(bytes);
     const ver = r.read(4);
-    if (ver !== 1 && ver !== 2) throw new Error('Unsupported case version');
+    if (ver < 1 || ver > 3) throw new Error('Unsupported case version');
     const p = { adult: !!r.read(1), ageMonths: r.read(6), noisy: !!r.read(1), noise: 0.3, ears: [] };
     if (ver >= 2) { const ni = r.read(4); p.noise = NOISE_LEVELS[ni] == null ? 0.3 : NOISE_LEVELS[ni]; }
     for (let i = 0; i < 2; i++) {
@@ -55,6 +56,7 @@
       for (let k = 0; k < 4; k++) e.bc.push((r.read(5) - 1) * 5);
       e.path = r.read(2); e.sev = r.read(2); e.cm = r.read(2);
       for (const key of ['latI', 'latIII', 'latV']) { const has = r.read(1), v = r.read(8); e[key] = has ? v / 20 : null; }
+      if (ver >= 3) { e.ring = r.read(1); e.morph = r.read(3); e.pam = r.read(2); } else { e.ring = 0; e.morph = 0; e.pam = 0; }
       p.ears.push(e);
     }
     const headBytes = Math.ceil(r.pos / 8);

@@ -51,12 +51,19 @@
   const TAU_A = 25, TAU_D = 38;
   const RETRO_S = [0.35, 0.65, 1.0, 1.6];
   const ANSD_D = [0.4, 0.7, 0.9, 1.0];
-  const CM_GAIN = [0, 0.12, 0.35, 0.9];                 // uV at 80 dB nHL click
-  const TONE_GAIN = { I: 0.20, II: 0.2, III: 0.3, IV: 0.45, V: 0.8 };
+  // CM source gain (uV) at 90 dB nHL (insert click) for Absent/Small/Moderate/Large; after the 100-3000 Hz filter Large gives
+  // ~0.35-0.4 uV peaks, as in clinical ANSD click printouts (90 dB nHL). Growth is linear up to 70 dB and compressive (0.5 dB/dB) above, so the CM
+  // saturates at 90-100 dB instead of rising 10x and swamping wave I.
+  const CM_GAIN = [0, 0.12, 0.32, 0.8];
+  const cmGrowth = (L) => Math.pow(10, (L >= 70 ? 0.5 * (L - 90) : -10 + (L - 70)) / 20);
+  // x0.45 overall to match clinical infant tone-burst printouts (normal ears, 30-3000 Hz, alternating, ~2000-4000 sweeps):
+  // V-V' ~80 / 140 / 200 nV at 2 kHz 25 / 45 / 65 dB nHL, ~130 nV at 4 kHz 45 dB, BC 2 kHz 45 dB ~200 nV
+  const TONE_GAIN = { I: 0.09, II: 0.09, III: 0.135, IV: 0.2, V: 0.36 };
 
   // frequency-dependent tone-burst amplitude: low-frequency tone V-V' complexes are larger and grow more linearly with level
   // (Stapells & Ruben 1989 Fig 3: 500 Hz 0.11 -> 0.46 uV over 0-40 dB nHL; 2 kHz 0.18 -> 0.25 uV, saturating above 30 dB)
-  const TONE_FREQ_GAIN = [2.4, 1.5, 1.2, 1.0];
+  // Clinical infant printouts: 500 Hz V-V' ~100 / 150 / 200 nV at 35 / 45 / 55 dB nHL (relatively larger than 2 kHz than before)
+  const TONE_FREQ_GAIN = [3.4, 1.8, 1.2, 1.0];
   const BONE_LF_GAIN = [1.2, 1.1, 1, 1];               // low-frequency BC tones excite a wider cochlear area (Stapells & Ruben 1989 discussion)
   // dB-equivalent onset offset for tone-burst amplitude growth: 500 Hz grows steeply with level (0.11 -> 0.46 uV over 0-40 dB nHL),
   // 2 kHz is nearly saturated at threshold (0.18 -> 0.25 uV; Stapells & Ruben 1989 Fig 3)
@@ -65,7 +72,7 @@
 
   /* ---------- patient ---------- */
   function newEar(o) {
-    return Object.assign({ ac: [5, 5, 5, 5], bc: [0, 0, 0, 0], path: 0, sev: 0, cm: 1,
+    return Object.assign({ ac: [5, 5, 5, 5], bc: [0, 0, 0, 0], path: 0, sev: 0, cm: 1, ring: 0, morph: 0, pam: 0,
                            latI: null, latIII: null, latV: null }, o || {});
   }
   function newPatient(o) {
@@ -276,43 +283,58 @@
   function cmResponse(p, stim, c, ipsi) {
     const ear = p.ears[c];
     const sig = new Float64Array(NS);
-    if (stim.polarity === 'alt') return sig;
+    if (stim.polarity === 'alt' || stim.clamped) return sig;
     const inp = cochleaInputs(p, stim)[c];
     const gain = CM_GAIN[ear.cm];
     if (!gain) return sig;
     const ohc = ear.path === 2 ? 1 : clamp(1 - clickHL(ear.bc) / 60, 0, 1);
     const eff = inp.level - (stim.transducer === 'bone' ? 0 : inp.gap);
-    const amp = gain * ohc * Math.pow(10, (eff - 80) / 20) * (ipsi ? 1 : 0.1);
+    const amp = gain * ohc * cmGrowth(eff) * (ipsi ? 1 : 0.1);
     if (amp < 1e-4) return sig;
     const sign = stim.polarity === 'rare' ? 1 : -1;
     const t0 = tubeDelay(stim) - 0.05;
     const f = stim.freq;
+    // ringing CM (often seen in ANSD): lower frequency and a long decay, ringing on for ~4-5 ms
+    // (clinical ANSD click printouts: period ~0.65 ms, still visible at ~4 ms, inverting between polarities)
+    const ring = ear.ring && !f;
+    const fr = ring ? 1.5 : 2.4, tau = ring ? 1.3 : 0.28;
     for (let i = 0; i < NS; i++) {
       const t = TS0 + i * DT - t0;
       if (t < 0) continue;
-      if (!f) sig[i] += sign * amp * Math.sin(2 * Math.PI * 2.4 * t) * Math.exp(-t / 0.28);
+      if (!f) sig[i] += sign * amp * Math.sin(2 * Math.PI * fr * t) * Math.exp(-t / tau) * (ring ? 1 - Math.exp(-t / 0.25) : 1);
       else {
         const T = 1000 / f, dur = 5 * T;                    // 2-1-2 cycle tone-burst
         if (t > dur) continue;
-        const env = t < 2 * T ? Math.sin(Math.PI / 2 * t / (2 * T)) ** 2
-                  : t < 3 * T ? 1 : Math.cos(Math.PI / 2 * (t - 3 * T) / (2 * T)) ** 2;
-        sig[i] += sign * amp * 0.5 * env * Math.sin(2 * Math.PI * f / 1000 * t);
+        sig[i] += sign * amp * 0.5 * burstEnv(t, T) * Math.sin(2 * Math.PI * f / 1000 * t);
       }
     }
     return sig;
   }
+  function burstEnv(t, T) {                       // 2-1-2 cycle envelope
+    return t < 2 * T ? Math.sin(Math.PI / 2 * t / (2 * T)) ** 2
+         : t < 3 * T ? 1 : Math.cos(Math.PI / 2 * (t - 3 * T) / (2 * T)) ** 2;
+  }
+  /* Electrical stimulus artefact from the transducer: present at t = 0 (no tube delay), so it survives a clamped insert
+   * tube while the CM (which is acoustic and arrives after the ~0.9 ms tube delay) disappears (UNHSEIP 5.36 clamp test).
+   * It inverts with polarity; condensation is slightly weaker than rarefaction, so alternating polarity leaves a residual
+   * (BCEHP 2022: transducer asymmetry, worst for BC 0.5 kHz and AC 90-100 dB nHL). Tone bursts follow the burst waveform. */
   function artifact(stim, ipsi) {
     const sig = new Float64Array(NS);
     if (stim.polarity === 'alt') return sig;
-    const bone = stim.transducer === 'bone';
-    const amp = (bone ? 0.30 : 0.02) * Math.pow(10, (stim.level - (bone ? 40 : 80)) / 20) * (ipsi ? 1 : 0.6);
-    if (amp < 1e-4) return sig;
-    const sign = stim.polarity === 'rare' ? 1 : -1;
-    const t0 = bone ? 0 : 0.05;
+    const bone = stim.transducer === 'bone', f = stim.freq;
+    const amp = (bone ? 0.30 : 0.15) * Math.pow(10, (stim.level - (bone ? 40 : 80)) / 20) * (ipsi ? 1 : 0.6)
+              * (stim.polarity === 'cond' ? -0.75 : 1);
+    if (Math.abs(amp) < 1e-4) return sig;
     for (let i = 0; i < NS; i++) {
-      const t = TS0 + i * DT - t0;
+      const t = TS0 + i * DT - (bone ? 0 : 0.05);
       if (t < 0) continue;
-      sig[i] += sign * amp * Math.sin(2 * Math.PI * 3.5 * t) * Math.exp(-t / 0.12);
+      if (!f) sig[i] += amp * Math.sin(2 * Math.PI * 3.5 * t) * Math.exp(-t / 0.12);
+      else {
+        const T = 1000 / f;
+        if (t > 5 * T + 1) continue;
+        const tail = t > 5 * T ? Math.exp(-(t - 5 * T) / 0.2) : 1;    // brief transducer ring-down after the burst
+        sig[i] += amp * 0.8 * burstEnv(Math.min(t, 5 * T), T) * tail * Math.sin(2 * Math.PI * f / 1000 * t);
+      }
     }
     return sig;
   }
@@ -354,7 +376,7 @@
     const hp = opts.hp == null ? 100 : opts.hp, lp = opts.lp == null ? 3000 : opts.lp;
     const chan = [0, 1].map((e) => {
       const s = new Float64Array(NS);
-      for (let c = 0; c < 2; c++) {
+      for (let c = 0; c < 2 && !stim.clamped; c++) {     // clamped insert tube: no sound reaches either cochlea
         const n = neuralResponse(p, stim, c, e);
         for (let i = 0; i < NS; i++) s[i] += n[i];
         const cm = cmResponse(p, stim, c, c === e);

@@ -23,6 +23,7 @@
   <button id="btnShare">Copy share link</button>
   <button id="btnReport">Report&hellip;</button>
   <span class="tgrp" title="Display"><button id="tbAB" class="tog" title="Show A/B splits (off by default)">A/B</button><button id="tbC" class="tog" title="Show contralateral traces">C</button></span>
+  <span class="tgrp" title="Clamp test"><button id="tbClamp" class="tog" title="Clamp the insert tube: no sound reaches the ear, so only stimulus artefact remains (CM and neural responses disappear)">Clamp insert</button></span>
   <span class="tgrp" title="Arrange curves"><button class="ord" data-ord="O" title="Order by testing order">O</button><button class="ord" data-ord="F" title="Order by frequency (click, then 0.5-4 kHz)">F</button><button class="ord" data-ord="I" title="Order by intensity (highest first)">I</button></span>
   <span class="sp"></span>
   <span id="pageBtns" class="tgrp" title="Recording pages"></span>
@@ -40,6 +41,7 @@
         <div class="row"><span>Stim.</span>
           <span class="radios"><label><input type="radio" name="ear" value="0" checked> Right</label> <label><input type="radio" name="ear" value="1"> Left</label></span></div>
         <div class="row"><span>Transducer</span><select id="trans"><option value="insert">Insert phone</option><option value="bone">Bone conductor</option></select></div>
+        <label class="row"><span>Insert tube clamped</span><input type="checkbox" id="clampChk"></label>
         <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
         <div class="row"><span>Rate (/s)</span><select id="rate"></select></div>
         <div class="row"><span>Averages</span><select id="nmax"></select></div>

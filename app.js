@@ -14,7 +14,7 @@
   const S = {
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
-    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.3,      // noise comes from the patient (case setting)
+    reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.3, clamped: false,      // noise comes from the patient (case setting)
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
@@ -36,6 +36,8 @@
     sel.innerHTML = vals.map((v) => `<option value="${v}"${v === cur ? ' selected' : ''}>${fmt ? fmt(v) : v}</option>`).join('');
   }
   const fmtMs = (v) => (v == null ? '' : v.toFixed(2));
+  const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C' };
+  const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C' };
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
@@ -56,6 +58,8 @@
     $('reject').value = S.reject; $('hpf').value = S.hp; $('lpf').value = S.lp; $('speed').value = S.speed;
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.checked = +r.value === S.ear));
     $('chanSel').value = S.chan; $('showAB').checked = S.showAB;
+    if (S.trans === 'bone') S.clamped = false;
+    $('tbClamp').classList.toggle('on', S.clamped); $('tbClamp').disabled = S.trans === 'bone'; $('clampChk').checked = S.clamped; $('clampChk').disabled = S.trans === 'bone';
     $('tbAB').classList.toggle('on', S.showAB); $('tbC').classList.toggle('on', S.chan === 'both');
     document.querySelectorAll('.ord').forEach((b) => b.classList.toggle('on', b.dataset.ord === S.order));
     const m = maxLevel();
@@ -80,10 +84,10 @@
 
   /* ---------- acquisition ---------- */
   function currentStim() {
-    return { ear: S.ear, level: S.level, freq: S.type, polarity: S.pol, rate: S.rate, transducer: S.trans };
+    return { ear: S.ear, level: S.level, freq: S.type, polarity: S.pol, rate: S.rate, transducer: S.trans, clamped: S.clamped && S.trans === 'insert' };
   }
   function labelFor(stim) {
-    const base = (stim.freq ? (stim.freq / 1000) + 'k ' : '') + stim.level + ' ' + EAR[stim.ear];
+    const base = (stim.freq ? (stim.freq / 1000) + 'k ' : '') + stim.level + ' ' + EAR[stim.ear] + (stim.clamped ? ' cl' : '');
     const n = S.traces.filter((t) => t.base === base && t.ear === stim.ear).length;
     return { base, label: n ? base + n : base };
   }
@@ -154,7 +158,7 @@
     // polarity) are overlaid on one baseline, as Eclipse overlays replicates.
     const groups = [], byKey = new Map();
     for (const t of list) {
-      const key = S.order === 'O' ? t.id : [t.stim.freq, t.stim.level, t.stim.transducer, t.stim.rate, t.stim.polarity].join('|');
+      const key = S.order === 'O' ? t.id : [t.stim.freq, t.stim.level, t.stim.transducer, t.stim.rate, t.stim.polarity, !!t.stim.clamped].join('|');
       let g = byKey.get(key); if (!g) { g = []; byKey.set(key, g); groups.push(g); }
       g.push(t);
     }
@@ -282,7 +286,7 @@
     $('traceList').innerHTML = '';
     S.traces.forEach((t) => {
       const d = document.createElement('div'); d.className = 'tr ' + EAR[t.ear] + (S.sel === t ? ' sel' : '');
-      d.innerHTML = `<input type="checkbox" ${t.hidden ? '' : 'checked'}><span class="tag">${t.label}</span><span>${typeLabel(t.stim.freq)} ${t.stim.rate}/s ${t.stim.polarity === 'rare' ? 'R' : t.stim.polarity === 'cond' ? 'C' : 'A'} ${t.n}</span>`;
+      d.innerHTML = `<input type="checkbox" ${t.hidden ? '' : 'checked'}><span class="tag">${t.label}</span><span>${typeLabel(t.stim.freq)} ${t.stim.rate}/s ${POL_SHORT[t.stim.polarity]}${t.stim.clamped ? ' clamped' : ''} ${t.n}</span>`;
       d.querySelector('input').onchange = (e) => { t.hidden = !e.target.checked; render(); };
       d.onclick = (e) => { if (e.target.tagName !== 'INPUT') { S.sel = t; renderList(); render(); } };
       $('traceList').appendChild(d);
@@ -448,6 +452,7 @@
     if (pair) {
       add(`Merge ${prev.label} + ${tr.label} (replace originals)`, () => combine(prev, tr, 'merge'));
       add(`Add ${prev.label} + ${tr.label} (weighted average, keep originals)`, () => combine(prev, tr, 'add'));
+      add(`Subtract (${prev.label} − ${tr.label}) / 2 (shows CM: rarefaction − condensation)`, () => combine(prev, tr, 'sub'));
     }
     if (tr.parts) add('Unmerge', () => unmerge(tr));
     add(tr.hidden ? 'Show' : 'Hide', () => (tr.hidden = !tr.hidden));
@@ -463,12 +468,13 @@
   /* merge = sweep-weighted average (grand average); add = arithmetic sum. Sources are kept so it can be unmerged. */
   function combine(a, b, mode) {
     const na = Math.max(a.n, 1), nb = Math.max(b.n, 1), nt = na + nb;
-    const wa = na / nt, wb = nb / nt;          // both modes: sweep-weighted average
+    // merge / add: sweep-weighted average; sub: (a - b) / 2, e.g. rarefaction - condensation isolates the CM (UNHSEIP 5.36)
+    const sub = mode === 'sub', wa = sub ? 0.5 : na / nt, wb = sub ? -0.5 : nb / nt;
     if (a.ch[0].avg.length !== b.ch[0].avg.length) { toast('Cannot combine click and tone-burst curves (different time windows)'); return; }
     const NWc = a.ch[0].avg.length;
     const mix = (x, y) => { const o = new Float64Array(NWc); for (let i = 0; i < NWc; i++) o[i] = wa * x[i] + wb * y[i]; return o; };
     const ch = [0, 1].map((k) => ({ avg: mix(a.ch[k].avg, b.ch[k].avg), A: mix(a.ch[k].A, b.ch[k].A), B: mix(a.ch[k].B, b.ch[k].B) }));
-    const rn = a.rn > 0 && b.rn > 0 ? 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn)) : 0;
+    const rn = !(a.rn > 0 && b.rn > 0) ? 0 : sub ? 0.5 * Math.hypot(a.rn, b.rn) : 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
     // reproducibility of the new A/B split (1-10 ms) and an Fmp-like statistic from the combined average
     let ta = 1, tb = 10;
     if (NWc > M.NW) {                     // tone burst: statistics around the wave V-V' peak of the combined average
@@ -486,8 +492,8 @@
     const rnU = Math.max(rn / 1000, 1e-4), fmp = (pw + rnU * rnU) / (rnU * rnU);
     S.mergeCount = (S.mergeCount || 0) + 1;
     const t = {
-      id: S.nextId++, base: a.base, ear: a.ear, stim: a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
-      label: a.base + (mode === 'merge' ? ' M' : ' +') + S.mergeCount, mode,
+      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
+      label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
       ch, n: nt, rejected: (a.rejected * na + b.rejected * nb) / nt, rn,
       repro: saa && sbb ? Math.max(0, sab / Math.sqrt(saa * sbb)) : 0, fmp, conf: Math.min(99.9, (1 - Math.exp(-2.2 * Math.max(0, fmp - 1))) * 100)
     };
@@ -497,9 +503,9 @@
       S.traces = S.traces.filter((x) => x !== a && x !== b);
       S.traces.splice(Math.max(0, at), 0, t);
       toast('Merged ' + a.label + ' + ' + b.label + ' (right-click > Unmerge to undo)');
-    } else {                                  // add keeps both originals visible
+    } else {                                  // add / subtract keep both originals visible
       S.traces.push(t);
-      toast('Added ' + a.label + ' + ' + b.label + ' as ' + t.label + ' (originals kept)');
+      toast((sub ? 'Subtracted ' + a.label + ' − ' : 'Added ' + a.label + ' + ') + b.label + ' as ' + t.label + ' (originals kept)');
     }
     S.sel = t;
   }
@@ -532,6 +538,7 @@
       <label>Pathology<select data-p="path" data-e="${e}">${PATHS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
       <label>Severity<select data-p="sev" data-e="${e}">${SEVS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
       <label>Cochlear microphonic<select data-p="cm" data-e="${e}">${CMS.map((n, i) => `<option value="${i}">${n}</option>`).join('')}</select></label>
+      <label>CM type<select data-p="ring" data-e="${e}"><option value="0">Brief</option><option value="1">Ringing (ANSD-type)</option></select></label>
       <label>Wave I (ms)<input type="number" step="0.05" data-p="latI" data-e="${e}" placeholder="auto"></label>
       <label>Wave III (ms)<input type="number" step="0.05" data-p="latIII" data-e="${e}" placeholder="auto"></label>
       <label>Wave V (ms)<input type="number" step="0.05" data-p="latV" data-e="${e}" placeholder="auto"></label></div>`).join('') +
@@ -602,7 +609,7 @@
     let h = `<div class="rep-head"><div><h2>ABR report &mdash; page ${S.page + 1}</h2><div>${S.patient.name} &mdash; ${S.patient.adult ? 'Adult' : 'Child ' + S.patient.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
       <div class="rep-graphs"><canvas id="rc0"></canvas><canvas id="rc1"></canvas></div><h3>Recordings</h3>
       <table><tr><th>Curve</th><th>Stimulus</th><th>Transducer</th><th>Recorded / rejected</th><th>Wave repro</th><th>Rate</th><th>Polarity</th><th>HPF / LPF</th><th>RN</th></tr>`;
-    for (const t of rows) h += `<tr><td>${t.label}</td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}</td><td>${t.n} / ${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.stim.rate}</td><td>${{ rare: 'Raref.', cond: 'Cond.', alt: 'Alter.' }[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td><td>${t.rn.toFixed(0)} nV</td></tr>`;
+    for (const t of rows) h += `<tr><td>${t.label}</td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}</td><td>${t.n} / ${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td><td>${t.rn.toFixed(0)} nV</td></tr>`;
     h += '</table><h3>Latencies (ms)</h3><div id="repLat"></div>';
     $('reportBody').innerHTML = h;
     $('repLat').innerHTML = $('lat').innerHTML;
@@ -650,6 +657,13 @@
     $('showAB').onchange = () => { S.showAB = $('showAB').checked; syncUI(); render(); };
     $('tbAB').onclick = () => { S.showAB = !S.showAB; syncUI(); render(); };
     $('tbC').onclick = () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; syncUI(); render(); };
+    const setClamp = (on) => {
+      if (on && S.trans === 'bone') { toast('The clamp test applies to insert phones: switch the transducer to Insert'); on = false; }
+      S.clamped = on; syncUI();
+      if (on) toast('Insert tube clamped: no sound reaches the ear, only stimulus artefact is recorded');
+    };
+    $('tbClamp').onclick = () => setClamp(!S.clamped);
+    $('clampChk').onchange = () => setClamp($('clampChk').checked);
     document.querySelectorAll('.ord').forEach((b) => (b.onclick = () => {
       S.order = b.dataset.ord; S.traces.forEach((t) => (t.dy = [0, 0]));   // re-arranging clears manual positions
       syncUI(); render();
