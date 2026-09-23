@@ -18,7 +18,7 @@
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
-    tab: 'record', wave: 'V', nextId: 1, selMark: null, hover: null
+    tab: 'record', wave: null, nextId: 1, selMark: null, hover: null
   };
 
   /* ---------- helpers ---------- */
@@ -292,16 +292,102 @@
       $('traceList').appendChild(d);
     });
   }
-  function renderLat() {
-    const rows = S.traces.filter((t) => Object.keys(t.marks).length || t.cat);
-    if (!rows.length) { $('lat').innerHTML = '<span class="hint">Latencies (ms): choose the Latency tab, select a curve and label waves I, III and V (keys 1-5); categorise with 6-8.</span>'; return; }
-    const f = (v) => (v == null ? '' : v.toFixed(2)), dif = (a, b) => (a != null && b != null ? (b - a).toFixed(2) : '');
-    let h = '<table><tr><th>Curve</th><th>Type</th><th>Rate</th>' + WAVES.map((w) => `<th>${w}</th>`).join('') + '<th>I-III</th><th>III-V</th><th>I-V</th><th>Category</th></tr>';
+  /* one latency table for the pop-out and the report */
+  const f2 = (v) => (v == null ? '' : v.toFixed(2)), dif = (a, b) => (a != null && b != null ? (b - a).toFixed(2) : '');
+  const markedRows = () => S.traces.filter((t) => Object.keys(t.marks).length || t.cat);
+  function latTableHTML(rows) {
+    if (!rows.length) return '<div class="hint">No labelled curves yet: select a curve, arm a wave on the toolbar (I-V or keys 1-5) and click the curve.</div>';
+    let h = '<table class="lat"><tr><th>Curve</th><th>Ear</th><th>Stimulus</th><th>dB nHL</th><th>Rate</th>' + WAVES.map((w) => `<th>${w}</th>`).join('') + '<th>I-III</th><th>III-V</th><th>I-V</th><th>Category</th></tr>';
     for (const t of rows) {
       const m = t.marks;
-      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)}</td><td>${t.stim.rate}</td>${WAVES.map((w) => `<td>${f(m[w])}</td>`).join('')}<td>${dif(m.I, m.III)}</td><td>${dif(m.III, m.V)}</td><td>${dif(m.I, m.V)}</td><td>${t.cat ? `<b style="color:${CAT_COL[t.cat]}">${t.cat}</b>` : ''}</td></tr>`;
+      h += `<tr><td><b>${t.label}</b></td><td>${EAR[t.ear]}</td><td>${typeLabel(t.stim.freq)}${t.stim.transducer === 'bone' ? ' BC' : ''}</td><td>${t.stim.level}</td><td>${t.stim.rate}</td>${WAVES.map((w) => `<td>${f2(m[w])}</td>`).join('')}<td>${dif(m.I, m.III)}</td><td>${dif(m.III, m.V)}</td><td>${dif(m.I, m.V)}</td><td>${t.cat ? `<b style="color:${CAT_COL[t.cat]}">${t.cat}</b>` : ''}</td></tr>`;
     }
-    $('lat').innerHTML = h + '</table>';
+    return h + '</table>';
+  }
+  function renderLat() {                          // Latency tab: the selected curve only
+    const t = S.sel;
+    if (!t) { $('latSel').innerHTML = '<div class="hint">Select a curve to see its latencies.</div>'; return; }
+    const m = t.marks;
+    $('latSel').innerHTML = `<div style="margin-bottom:3px"><b>${t.label}</b> &mdash; ${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL ${t.stim.transducer === 'bone' ? 'BC' : 'AC'} ${t.ear ? 'left' : 'right'}${t.cat ? ` &nbsp;<b style="color:${CAT_COL[t.cat]}">${t.cat}</b>` : ''}</div>` +
+      '<table><tr><th>Wave</th>' + WAVES.map((w) => `<th>${w}</th>`).join('') + '</tr><tr><th>ms</th>' + WAVES.map((w) => `<td>${f2(m[w])}</td>`).join('') + '</tr></table>' +
+      `<table style="margin-top:4px"><tr><th>I-III</th><th>III-V</th><th>I-V</th></tr><tr><td>${dif(m.I, m.III)}</td><td>${dif(m.III, m.V)}</td><td>${dif(m.I, m.V)}</td></tr></table>`;
+  }
+
+  /* ---------- latency-intensity chart (Eclipse style: ms vs dB nHL, normative grey bands from M.normalLI) ---------- */
+  const LI_SYM = { I: 'tri', II: 'sq', III: 'x', IV: 'o', V: 'tridn' };
+  const liUsable = (t) => Object.keys(t.marks).length && !t.stim.clamped && t.stim.polarity !== 'sub';
+  function liGroups() {
+    const keys = new Map();
+    for (const t of S.traces) {
+      if (!liUsable(t)) continue;
+      const k = t.stim.freq + '|' + t.stim.transducer;
+      if (!keys.has(k)) keys.set(k, { freq: t.stim.freq, transducer: t.stim.transducer, label: typeLabel(t.stim.freq) + (t.stim.transducer === 'bone' ? ' bone conduction' : ' air conduction') });
+    }
+    return [...keys.values()].sort((a, b) => a.freq - b.freq || (a.transducer > b.transducer ? 1 : -1));
+  }
+  function drawSym(g, kind, x, y, r) {
+    g.beginPath();
+    if (kind === 'tri') { g.moveTo(x, y - r); g.lineTo(x + r, y + r * 0.8); g.lineTo(x - r, y + r * 0.8); g.closePath(); }
+    else if (kind === 'tridn') { g.moveTo(x, y + r); g.lineTo(x + r, y - r * 0.8); g.lineTo(x - r, y - r * 0.8); g.closePath(); }
+    else if (kind === 'sq') g.rect(x - r * 0.8, y - r * 0.8, r * 1.6, r * 1.6);
+    else if (kind === 'o') g.arc(x, y, r * 0.9, 0, 2 * Math.PI);
+    else { g.moveTo(x - r, y - r); g.lineTo(x + r, y + r); g.moveTo(x + r, y - r); g.lineTo(x - r, y + r); }
+    g.stroke();
+  }
+  function drawLI(cv, grp, scale) {
+    const k = scale || window.devicePixelRatio || 1, W = cv.clientWidth || 480, H = cv.clientHeight || 320;
+    cv.width = Math.round(W * k); cv.height = Math.round(H * k);
+    const g = cv.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    const L0 = -10, L1 = 110, T1 = grp.freq ? (grp.freq <= 500 ? 20 : 16) : 12;
+    const ml = 40, mr = 70, mt = 22, mb = 34;
+    const x = (L) => ml + (L - L0) / (L1 - L0) * (W - ml - mr), y = (t) => H - mb - t / T1 * (H - mt - mb);
+    g.font = '11px Segoe UI'; g.fillStyle = '#222'; g.textAlign = 'left'; g.fillText(grp.label, ml, 14);
+    // normative bands (normal-hearing patient of the same age, +/- 2 SD)
+    const nb = M.normalLI(S.patient, grp.freq, grp.transducer);
+    g.fillStyle = 'rgba(0,0,0,0.13)';
+    for (const w of ['I', 'III', 'V']) {
+      const pts = nb.filter((r) => r[w]);
+      if (pts.length < 2) continue;
+      g.beginPath();
+      pts.forEach((r, i) => (i ? g.lineTo(x(r.L), y(r[w][0])) : g.moveTo(x(r.L), y(r[w][0]))));
+      for (let i = pts.length - 1; i >= 0; i--) g.lineTo(x(pts[i].L), y(pts[i][w][2]));
+      g.closePath(); g.fill();
+    }
+    // grid and axes
+    g.strokeStyle = '#e2e2e2'; g.lineWidth = 1; g.fillStyle = '#444'; g.textAlign = 'center';
+    for (let L = -10; L <= 110; L += 10) { g.beginPath(); g.moveTo(x(L), mt); g.lineTo(x(L), H - mb); g.stroke(); g.fillText(L, x(L), H - mb + 14); }
+    g.textAlign = 'right';
+    for (let t = 0; t <= T1; t += (T1 > 12 ? 2 : 1)) { g.beginPath(); g.moveTo(ml, y(t)); g.lineTo(W - mr, y(t)); g.stroke(); g.fillText(t, ml - 5, y(t) + 4); }
+    g.strokeStyle = '#555'; g.strokeRect(ml, mt, W - ml - mr, H - mt - mb);
+    g.textAlign = 'center'; g.fillText('dB nHL', (ml + W - mr) / 2, H - 4);
+    g.save(); g.translate(11, (mt + H - mb) / 2); g.rotate(-Math.PI / 2); g.fillText('ms', 0, 0); g.restore();
+    // labelled latencies (right / left offset slightly so overlapping points stay visible)
+    g.lineWidth = 1.4;
+    for (const t of S.traces) {
+      if (t.stim.freq !== grp.freq || t.stim.transducer !== grp.transducer || !liUsable(t)) continue;
+      g.strokeStyle = t.ear === 0 ? '#b01818' : '#1a1a9c';
+      for (const w of WAVES) if (t.marks[w] != null) drawSym(g, LI_SYM[w], x(t.stim.level + (t.ear ? 0.8 : -0.8)), y(t.marks[w]), 4.5);
+    }
+    // legend
+    g.textAlign = 'left'; g.strokeStyle = '#222'; g.lineWidth = 1.2; g.fillStyle = '#222';
+    WAVES.forEach((w, i) => { const ly = mt + 10 + i * 15; drawSym(g, LI_SYM[w], W - mr + 14, ly, 4); g.fillText(w, W - mr + 24, ly + 4); });
+    g.fillStyle = '#b01818'; g.fillText('Right', W - mr + 8, mt + 95); g.fillStyle = '#1a1a9c'; g.fillText('Left', W - mr + 8, mt + 110);
+    g.fillStyle = '#777'; g.font = '9px Segoe UI'; g.fillText('grey: normal', W - mr + 4, mt + 128); g.fillText('±2 SD', W - mr + 4, mt + 139);
+  }
+  function liChartsHTML(prefix) {
+    const gs = liGroups();
+    if (!gs.length) return { html: '<div class="hint">No labelled curves to plot: label wave peaks (I-V) on curves at several levels.</div>', gs };
+    return { html: '<div class="li-charts">' + gs.map((g, i) => `<canvas id="${prefix}${i}"></canvas>`).join('') + '</div>', gs };
+  }
+  function openPop(title, html, after) {
+    $('popTitle').textContent = title; $('popBody').innerHTML = html; $('mPop').hidden = false;
+    if (after) requestAnimationFrame(after);
+  }
+  function openLatAll() { openPop('Latencies (ms) — page ' + (S.page + 1), latTableHTML(markedRows())); }
+  function openLI() {
+    const { html, gs } = liChartsHTML('li');
+    openPop('Latency–intensity — page ' + (S.page + 1), html, () => gs.forEach((g, i) => drawLI($('li' + i), g)));
   }
   /* ---------- labels: wave marks (I-V) and response category (CR/NR/INC) ---------- */
   const clampT = (tr, t) => Math.max(W0, Math.min(W0 + (tr.ch[0].avg.length - 1) * DT, t));
@@ -419,7 +505,7 @@
     const tr = h.it.tr;
     if (tr.live) return;
     if (h.onTag) S.sel = tr;
-    else if (S.tab === 'latency' && S.sel === tr && h.it.chan === 0) placeMark(tr, S.wave, snapPeak(tr, h.t));
+    else if (S.wave && S.sel === tr && h.it.chan === 0) placeMark(tr, S.wave, snapPeak(tr, h.t));   // armed wave: label the selected curve (any tab)
     else S.sel = tr;
     renderList(); render();
   }
@@ -614,7 +700,7 @@
     for (const t of rows) h += `<tr><td>${t.label}</td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}</td><td>${t.n} / ${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td><td>${t.rn.toFixed(0)} nV</td></tr>`;
     h += '</table><h3>Latencies (ms)</h3><div id="repLat"></div>';
     $('reportBody').innerHTML = h;
-    $('repLat').innerHTML = $('lat').innerHTML;
+    $('repLat').innerHTML = latTableHTML(markedRows());
     $('mReport').hidden = false;
     requestAnimationFrame(() => { draw($('rc0'), 0, 'x'); draw($('rc1'), 1, 'x'); });
   }
@@ -622,8 +708,8 @@
   /* ---------- wiring ---------- */
   function init() {
     fill($('rate'), RATES, 17.1, (v) => v.toFixed(1)); fill($('nmax'), NMAX, 2000);
-    $('waveBtns').innerHTML = WAVES.map((w, i) => `<button data-w="${w}" title="Key ${i + 1}" class="${w === S.wave ? 'on' : ''}">${w}<span class="kb">${i + 1}</span></button>`).join('');
-    $('waveBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) { S.wave = b.dataset.w; renderLabelUI(); } };
+    $('waveBtns').innerHTML = WAVES.map((w, i) => `<button data-w="${w}" title="Arm wave ${w} (key ${i + 1}); click again to disarm">${w}<span class="kb">${i + 1}</span></button>`).join('');
+    $('waveBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) { S.wave = S.wave === b.dataset.w ? null : b.dataset.w; renderLabelUI(); } };
     $('catBtns').innerHTML = CATS.map((c, i) => `<button data-c="${c}" title="${CAT_NAME[c]} (key ${i + 6})">${c}<span class="kb">${i + 6}</span></button>`).join('');
     $('catBtns').onclick = (e) => { const b = e.target.closest('button'); if (b) { setCat(S.sel, b.dataset.c); render(); } };
     $('nudge').onclick = (e) => { const b = e.target.closest('button[data-n]'); if (b) nudge(+b.dataset.n); };
@@ -631,7 +717,8 @@
     document.addEventListener('keydown', (e) => {
       const tg = e.target && e.target.tagName;
       if (tg === 'INPUT' || tg === 'SELECT' || tg === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (!$('mPatient').hidden || !$('mReport').hidden) return;
+      if (!$('mPop').hidden && e.key === 'Escape') { $('mPop').hidden = true; return; }
+      if (!$('mPatient').hidden || !$('mReport').hidden || !$('mPop').hidden) return;
       const k = e.key;
       if (k >= '1' && k <= '5') {                     // 1-5: arm wave I-V; with the pointer over a curve, place it there
         S.wave = WAVES[+k - 1];
@@ -640,6 +727,7 @@
         render(); e.preventDefault();
       } else if (k === '6' || k === '7' || k === '8') { setCat(S.sel, CATS[+k - 6]); render(); e.preventDefault(); }
       else if (k === 'ArrowLeft' || k === 'ArrowRight') { if (curMark() || (S.sel && S.sel.marks[S.wave] != null)) { nudge((k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 1)); e.preventDefault(); } }
+      else if (k === 'Escape') { S.wave = null; render(); }
       else if (k === 'Delete' || k === 'Backspace') { const m = curMark(); if (m) { removeMark(m); render(); e.preventDefault(); } }
     });
     document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => {
@@ -680,6 +768,7 @@
     [0, 1].forEach((e) => { bindDrag($('cv' + e), e); });
     [0, 1].forEach((e) => { const cv = $('cv' + e); cv.onclick = (ev) => onClick(cv, e, ev); cv.oncontextmenu = (ev) => onContext(cv, e, ev); });
     document.addEventListener('click', () => ($('ctx').hidden = true));
+    $('btnLatAll').onclick = openLatAll; $('btnLI').onclick = openLI; $('popClose').onclick = () => ($('mPop').hidden = true);
     $('btnReport').onclick = openReport; $('rClose').onclick = () => ($('mReport').hidden = true); $('rPrint').onclick = () => window.print();
     window.addEventListener('resize', render);
     bindPatient();

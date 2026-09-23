@@ -22,6 +22,8 @@
   <button id="btnPatient">Patient / case&hellip;</button>
   <button id="btnShare">Copy share link</button>
   <button id="btnReport">Report&hellip;</button>
+  <span id="waveBtns" class="tgrp lblgrp" title="Wave labels: arm a wave (keys 1-5), then click the selected curve. Click the armed wave again (or Esc) to disarm."></span>
+  <span id="catBtns" class="tgrp lblgrp" title="Response category for the selected curve (keys 6-8)"></span>
   <span class="tgrp" title="Display"><button id="tbAB" class="tog" title="Show A/B splits (off by default)">A/B</button><button id="tbC" class="tog" title="Show contralateral traces">C</button></span>
   <span class="tgrp" title="Clamp test"><button id="tbClamp" class="tog" title="Clamp the insert tube: no sound reaches the ear, so only stimulus artefact remains (CM and neural responses disappear)">Clamp insert</button></span>
   <span class="tgrp" title="Arrange curves"><button class="ord" data-ord="O" title="Order by testing order">O</button><button class="ord" data-ord="F" title="Order by frequency (click, then 0.5-4 kHz)">F</button><button class="ord" data-ord="I" title="Order by intensity (highest first)">I</button></span>
@@ -75,10 +77,14 @@
 
     <div class="tabpane" id="tab-latency" hidden>
       <div class="box">
-        <div class="lbl">Labels <span class="hint">keys 1-5 waves, 6-8 category</span></div>
-        <div id="waveBtns"></div>
-        <div id="catBtns"></div>
-        <div class="hint">Click the selected curve to place the armed wave label, or press 1-5 with the pointer over a curve (it snaps to the nearest peak).
+        <div class="lbl">Selected curve</div>
+        <div id="latSel"></div>
+        <div class="btns" style="margin-top:6px"><button id="btnLatAll">All curves table&hellip;</button><button id="btnLI">Latency&ndash;intensity&hellip;</button></div>
+      </div>
+      <div class="box">
+        <div class="lbl">Labels</div>
+        <div class="hint">Wave (I-V) and category (CR/NR/INC) buttons are on the toolbar. Arm a wave (or press 1-5), then click the selected curve;
+          with the pointer over a curve, 1-5 place the label directly (it snaps to the nearest peak). Click the armed wave again or press Esc to disarm.
           CR = clear response, NR = no response, INC = inconclusive (6-8 on the selected curve; press again to remove).</div>
       </div>
       <div class="box">
@@ -105,7 +111,6 @@
       <div class="pane"><div class="ptitle r">Right ear</div><canvas id="cv0"></canvas></div>
       <div class="pane"><div class="ptitle l">Left ear</div><canvas id="cv1"></canvas></div>
     </div>
-    <div id="lat"></div>
   </section>
 </div>
 
@@ -131,6 +136,12 @@
   </details>
   <div class="btns"><button id="pApply" class="go admin">Apply</button><button id="pCopy" class="admin">Copy share link</button><button id="pClose">Close</button></div>
   <div class="hint" id="pHint"></div>
+</div></div>
+
+<!-- Pop-out: all-curves latency table, latency-intensity charts -->
+<div class="modal" id="mPop" hidden><div class="mbox wide">
+  <div class="btns noprint"><h2 id="popTitle" style="flex:1"></h2><button id="popClose">Close</button></div>
+  <div id="popBody"></div>
 </div></div>
 
 <!-- Report modal -->
