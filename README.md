@@ -12,19 +12,23 @@ http://localhost:8232. It can be hosted on GitHub Pages as-is.
 
 ## What you can do
 - **Stimuli:** click, or 0.5 / 1 / 2 / 4 kHz tone bursts; insert phones or a bone conductor; rarefaction,
-  condensation or alternating polarity (buffer A = rarefaction, B = condensation); rate, level, averages, reject
-  level, filters and an adjustable EEG-noise level.
+  condensation or alternating polarity (buffer A = rarefaction, B = condensation; tone bursts default to alternating,
+  as in the NZ UNHSEIP protocol); rate, level, averages, reject level, filters and an adjustable EEG-noise level.
+  **Clamp insert** runs a no-sound (clamped tube) recording: only the stimulus artefact remains, so a CM disappears.
 - **Recording:** live averaging with A/B splits, response confidence, Fmp, residual noise and wave reproducibility.
   Ipsilateral and contralateral channels are recorded together.
-- **Labelling:** on the Latency tab place wave labels I–V (keys **1–5**, or click the selected curve; they snap to the
-  nearest peak) and categorise a curve as CR / NR / INC (clear response / no response / inconclusive; keys **6–8**).
+- **Labelling:** arm a wave label I–V on the toolbar (keys **1–5**), then click the selected curve (it snaps to the
+  nearest peak); click the armed wave again or press Esc to disarm. Categorise a curve as CR / NR / INC (clear
+  response / no response / inconclusive; toolbar or keys **6–8**).
   Drag a label to move it, or select it and nudge it with the ◄ ► buttons or arrow keys (Shift = bigger steps);
   Delete or a right-click removes a label.
-- **Analysis:** read latencies and interpeak intervals from the labels; drag curves
-  up and down by their tags; merge curves (weighted average, can be unmerged) or add them (keeps the originals);
-  export a waveform as CSV; print a report.
+- **Analysis:** the Latency tab shows the selected curve's latencies and intervals, with pop-outs for the table of
+  all curves and latency–intensity charts (grey normative bands); drag curves up and down by their tags; merge curves
+  (weighted average, can be unmerged), add them (keeps the originals) or subtract rarefaction − condensation to show
+  the CM; export a waveform as CSV; print a report (all curves, recording statistics, latencies, L–I charts).
 - **Patients:** adult or child (age in months), quiet asleep or noisy awake, 4-point air- and bone-conduction
-  thresholds for each ear, retrocochlear pathology, auditory neuropathy with cochlear microphonic, and optional
+  thresholds for each ear, retrocochlear pathology, auditory neuropathy with cochlear microphonic (brief or ringing),
+  click morphology variants (II, IV/V complex, large III), an optional post-auricular muscle wave, and optional
   manual latencies for waves I, III and V.
 
 ## Sharing a case
@@ -49,8 +53,9 @@ published data rather than invented values:
 | Bone-conducted tones, ipsi/contra asymmetry | Stapells & Ruben (1989), *Ann Otol Rhinol Laryngol* 98:941 |
 | Levels, transducer limits, ANSD/CM criteria | BC Early Hearing Program ABR Protocol (2022) |
 
-Tone-burst amplitudes are tuned so a normal ear is detected about as often as in Stapells et al. (about 100% at
-30 dB nHL); the papers do not give amplitude tables. It is a teaching tool, not a diagnostic one — do not use it to
+Tone-burst amplitudes are matched to clinical infant tone-burst recordings (e.g. 2 kHz V–V′ about 80 / 140 / 200 nV
+at 25 / 45 / 65 dB nHL) while keeping detection close to Stapells et al. (about 100% at 30 dB nHL); the papers do not
+give amplitude tables. It is a teaching tool, not a diagnostic one — do not use it to
 make clinical decisions.
 
 ## Project layout
