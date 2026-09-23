@@ -39,8 +39,9 @@
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
-    if (S.type === 0) { S.zoom = 1; S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
-    else { S.zoom = 1.6; S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; if (S.level > 70) S.level = 60; }
+    // NZ UNHSEIP Appendix 4: tone bursts alternating polarity, 39.1/s, HPF 30 Hz; clicks rarefaction (separate R/C runs for CM)
+    if (S.type === 0) { S.zoom = 1; S.hp = 100; S.lp = 3000; S.rate = 17.1; S.nmax = 2000; S.pol = 'rare'; S.level = Math.min(S.level || 80, 100); if (S.level < 60) S.level = 80; }
+    else { S.zoom = 1.6; S.hp = 30; S.lp = 3000; S.rate = 39.1; S.nmax = 2000; S.pol = 'alt'; if (S.level > 70) S.level = 60; }
     clampLevel();
   }
   function clampLevel() {
