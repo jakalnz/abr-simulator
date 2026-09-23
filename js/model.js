@@ -61,6 +61,8 @@
   const TARGET = { I: 1.66, III: 3.82, V: 5.75 };       // Kelly (1996) adult, 80 dB nHL, 17.1/s, insert
   const OFFSET = { I: 0, II: 0, III: 0, IV: 0, V: 0 };  // set by calibrate()
   const TAU_A = 25, TAU_D = 38;
+  // tone-burst response size: V-V' grows ~1 : 1.75 : 2.5 from 25 to 65 dB nHL at 2 kHz in clinical infant printouts
+  const TAU_TONE = 80, TONE_W = 0.83;
   const RETRO_S = [0.35, 0.65, 1.0, 1.6];
   const ANSD_D = [0.4, 0.7, 0.9, 1.0];
   // CM source gain (uV) at 90 dB nHL (insert click) for Absent/Small/Moderate/Large; after the 100-3000 Hz filter Large gives
@@ -76,7 +78,9 @@
   // (Stapells & Ruben 1989 Fig 3: 500 Hz 0.11 -> 0.46 uV over 0-40 dB nHL; 2 kHz 0.18 -> 0.25 uV, saturating above 30 dB)
   // Clinical infant printouts: 500 Hz V-V' ~100 / 150 / 200 nV at 35 / 45 / 55 dB nHL (relatively larger than 2 kHz than before)
   const TONE_FREQ_GAIN = [3.4, 1.8, 1.2, 1.0];
-  const BONE_LF_GAIN = [1.2, 1.1, 1, 1];               // low-frequency BC tones excite a wider cochlear area (Stapells & Ruben 1989 discussion)
+  // BC tone-burst gain: low-frequency BC tones excite a wider cochlear area (Stapells & Ruben 1989 discussion); 2-4 kHz raised so
+  // infant BC 2 kHz at 45 dB nHL gives ~0.2 uV ipsi (Stapells & Ruben 1989: 0.18-0.25 uV; clinical infant BC printouts)
+  const BONE_LF_GAIN = [1.2, 1.3, 1.5, 1.5];
   // dB-equivalent onset offset for tone-burst amplitude growth: 500 Hz grows steeply with level (0.11 -> 0.46 uV over 0-40 dB nHL),
   // 2 kHz is nearly saturated at threshold (0.18 -> 0.25 uV; Stapells & Ruben 1989 Fig 3)
   const TONE_ONSET = [4, 8, 10, 10];
@@ -236,14 +240,23 @@
     const ansdD = ear.path === 2 ? ANSD_D[ear.sev] : 0;
 
     const morph = f ? {} : (MORPH[ear.morph] || MORPH[0]);
+    /* Tone bursts are treated as one response: its size and wave V latency follow the best-excited place (Emax; the tone
+     * place in a normal ear, Neely et al. 1988 latency as a function of level), and the amplitude is shared out over the
+     * excited CF channels, each keeping its travelling-wave delay relative to the tone place. Summing independent
+     * channels made the V-V' grow too steeply with level (more channels joining) and V drift later again above ~70 dB. */
+    const Eex = CH_CF.map((cf, ci) => { const E = excitation(inp, stim, ci, ear); return E > 0 ? E * (1 + 0.6 * clamp(interp(ear.bc, cf) / 60, 0, 1)) : 0; });
+    const Emax = Math.max(...Eex);
+    const wTone = Eex.map((E) => (E > 0 ? Math.exp(-(Emax - E) / 12) : 0));
+    const wSum = wTone.reduce((x, y) => x + y, 0) || 1;
     for (let ci = 0; ci < CH_CF.length; ci++) {
       const E = excitation(inp, stim, ci, ear);
       if (E <= 0) continue;
       const bcHL = interp(bone ? ear.bc : ear.bc, CH_CF[ci]);
       const rec = 0.6 * clamp(bcHL / 60, 0, 1);             // recruitment (sensorineural part only)
       const Ee = E * (1 + rec);
-      const a = 1 - Math.exp(-(Ee + (f ? interp(TONE_ONSET, f) : 0)) / TAU_A);   // tone bursts: a detectable (~2x residual noise) response right at threshold
-      const w = f ? 1 / 3 : CH_W[ci] / 5.2;
+      // tone bursts: slower saturation (TAU_TONE) and an onset offset so a detectable (~2x residual noise) response exists at threshold
+      const a = f ? 1 - Math.exp(-(Emax + interp(TONE_ONSET, f)) / TAU_TONE) : 1 - Math.exp(-Ee / TAU_A);
+      const w = f ? TONE_W * wTone[ci] / wSum : CH_W[ci] / 5.2;
       const jit = (0.05 + 0.25 * Math.exp(-Ee / 25)) * (1 + 6 * ansdD);
       for (const k of WAVES) {
         const W = WV[k];
@@ -265,7 +278,7 @@
         const mo = morph[k] || {};
         if (mo.a) amp *= mo.a;
         // timing
-        let mu = (f ? toneLatency(f, Ee, k) : OFFSET[k] + tw(CH_CF[ci]) + W.D * Math.exp(-Ee / TAU_D))
+        let mu = (f ? toneLatency(f, Emax, k) + (tw(CH_CF[ci]) - tw(f)) : OFFSET[k] + tw(CH_CF[ci]) + W.D * Math.exp(-Ee / TAU_D))
                + ageShift(p, k) + pathShift(ear, k) + overrideShift(p, c, k) + tubeShift
                + (ipsi ? 0 : W.cd)
                + rf * { I: 0.10, II: 0.13, III: 0.20, IV: 0.28, V: 0.35 }[k] * (1 + 1.5 * retroS)
@@ -589,10 +602,44 @@
   }
   calibrate();
 
+  /* Normative latency-intensity bands for the L-I chart, from the model itself so bands and simulated normals agree:
+   * a normal-hearing copy of the patient (same age) is simulated (clean, alternating) at 0-100 dB nHL and the I / III / V
+   * peaks are tracked from the highest level down (tone bursts: V only). Width +/- 2 SD, wave V SD from Gorga et al. 1989
+   * Table 2 (children 3-36 mo: ~0.56 / 0.37 / 0.30 / 0.26 ms at 20 / 40 / 60 / 80 dB HLn), fitted as 0.24 + 0.6 exp(-0.035 L);
+   * waves I and III are given 0.6x and 0.8x that SD (approximate; Gorga reports V only). */
+  const liCache = {};
+  const liSD = (L) => 0.24 + 0.6 * Math.exp(-0.035 * L);
+  function normalLI(p, freq, transducer) {
+    const key = [p.adult, p.ageMonths, freq, transducer].join('|');
+    if (liCache[key]) return liCache[key];
+    const n = newPatient({ adult: p.adult, ageMonths: p.ageMonths, ears: [{ ac: [0, 0, 0, 0], bc: [0, 0, 0, 0], cm: 0 }, { ac: [0, 0, 0, 0], bc: [0, 0, 0, 0], cm: 0 }] });
+    const maxL = transducer === 'bone' ? 60 : 100, out = [], prev = {};
+    const waves = freq ? ['V'] : ['I', 'III', 'V'];
+    for (let L = maxL; L >= 0; L -= 5) {
+      const sim = (pol) => simulate(n, { ear: 0, level: L, freq, polarity: pol, rate: freq ? 39.1 : 17.1, transducer }, { hp: freq ? 30 : 100, lp: 3000 }).ipsi;
+      const a = sim('rare'), b = sim('cond'), x = a.map((v, i) => (v + b[i]) / 2);
+      const row = { L };
+      for (const k of waves) {
+        // first (highest) level: wide windows that cover adults and infants; then follow each peak down in level
+        const first = { I: [1.0, 2.4], III: [3.0, 5.0], V: freq ? [4.5, 18] : [4.9, 7.6] }[k];
+        const lo = prev[k] != null ? prev[k] - 0.1 : first[0];
+        const hi = freq ? 20 : prev[k] != null ? prev[k] + 0.8 : first[1];      // tone bursts: V is the largest peak
+        let bi = -1, bm = 0.025;              // needs a clean peak of at least 25 nV
+        for (let i = Math.round((lo - W0) / DT); i <= Math.round((hi - W0) / DT) && i < x.length; i++) if (x[i] > bm && x[i] >= x[i - 1] && x[i] >= x[i + 1]) { bm = x[i]; bi = i; }
+        if (bi < 0) { prev[k] = null; if (!freq && k === 'V') break; continue; }
+        const t = W0 + bi * DT; prev[k] = t;
+        row[k] = [t - 2 * liSD(L) * { I: 0.6, III: 0.8, V: 1 }[k], t, t + 2 * liSD(L) * { I: 0.6, III: 0.8, V: 1 }[k]];
+      }
+      if (!waves.some((k) => row[k])) break;
+      out.push(row);
+    }
+    return (liCache[key] = out.reverse());
+  }
+
   root.ABRModel = {
     FS, DT, W0, W1, NW, W1_TONE, nwFor, FREQS, CH_CF, WAVES, MAX_LEVEL, TARGET, INTERAURAL_ATT_INSERT,
     MORPH_NAMES, newPatient, newEar, simulate, Acquisition, thrNHL, clickThr, clickHL, ABR_CORR_AC, ABR_CORR_BC, ABR_BASE,
-    nominalLatency, toneLatency, OFFSET
+    nominalLatency, toneLatency, OFFSET, normalLI
   };
   if (typeof module !== 'undefined') module.exports = root.ABRModel;
 })(typeof window !== 'undefined' ? window : globalThis);
