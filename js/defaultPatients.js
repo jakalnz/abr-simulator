@@ -18,5 +18,12 @@ window.DEFAULT_PATIENTS = [
     ears: [{ ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }, { ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }] },
   { name: 'Baby 5 mo - auditory neuropathy (CM present)', adult: false, ageMonths: 5, noisy: false,
     ears: [{ ac: [60, 55, 50, 55], bc: [55, 50, 45, 50], path: 2, sev: 3, cm: 3, ring: 1 },
-           { ac: [60, 60, 55, 55], bc: [55, 55, 50, 50], path: 2, sev: 3, cm: 3, ring: 1 }] }
+           { ac: [60, 60, 55, 55], bc: [55, 55, 50, 50], path: 2, sev: 3, cm: 3, ring: 1 }] },
+  // partial ANSD: hearing much better than the ABR suggests; late, broad, small wave V only at high click levels
+  { name: 'Baby 4 mo - partial auditory neuropathy (mild)', adult: false, ageMonths: 4, noisy: false,
+    ears: [{ ac: [25, 25, 30, 30], bc: [20, 20, 25, 25], path: 2, sev: 0, cm: 3 },
+           { ac: [30, 25, 25, 30], bc: [25, 20, 20, 25], path: 2, sev: 0, cm: 3 }] },
+  { name: 'Baby 6 mo - partial auditory neuropathy (moderate)', adult: false, ageMonths: 6, noisy: false,
+    ears: [{ ac: [40, 40, 45, 45], bc: [35, 35, 40, 40], path: 2, sev: 1, cm: 3, ring: 1 },
+           { ac: [40, 45, 45, 50], bc: [35, 40, 40, 45], path: 2, sev: 1, cm: 3, ring: 1 }] }
 ];

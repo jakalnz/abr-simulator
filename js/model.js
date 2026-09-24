@@ -66,7 +66,17 @@
   // tone-burst response size: V-V' grows ~1 : 1.75 : 2.5 from 25 to 65 dB nHL at 2 kHz in clinical infant printouts
   const TAU_TONE = 80, TONE_W = 0.83;
   const RETRO_S = [0.35, 0.65, 1.0, 1.6];
-  const ANSD_D = [0.4, 0.7, 0.9, 1.0];
+  /* ANSD (path 2), per severity Mild / Moderate / Severe / Marked (null = no neural response). The neural response has its own
+   * onset T (dB nHL at the cochlea, AC after the conductive gap) that the audiogram does not predict, so behavioural thresholds
+   * can be much better than the ABR (UNHSEIP 5.38, BCEHP 2022 5.13). Clamping the excitation to level - T makes V small, late
+   * and broad near onset and later as level falls (UNHSEIP 5.37). g = amplitude, j = jitter multiplier. Targets (BCEHP 2022):
+   * Mild = partial ANSD with a late, broad V at 90 dB nHL click (5.7), V-V' 0.1-0.2 uV (Table 5.10.1 Probable with CM > 0.2 uV);
+   * Moderate = V-V' < 0.1 uV (Definite) but still above ~2x RN; both meet the entry criterion (5.2: 2 kHz at 80 dB nHL NR or V > 10 ms).
+   * V-V' is the larger of RC and CC, as 5.6 requires when alternating partly cancels. */
+  const ANSD = [{ T: 55, g: 0.35, j: 3 }, { T: 70, g: 0.32, j: 4 }, { T: 85, g: 0.3, j: 5 }, null];
+  const ANSD_TONE_T = 5;    // tone bursts need ~5 dB more than clicks (clicks elicit poor ABRs better than tones, BCEHP 2022 5.1)
+  // waves I/II mostly absent, III weak, V most robust: clear I with a late V reads as retrocochlear instead (BCEHP 2022 5.7)
+  const ANSD_WAVE = { I: 0.15, II: 0.15, III: 0.4, IV: 0.8, V: 1 };
   // CM source gain (uV) at 90 dB nHL (insert click) for Absent/Small/Moderate/Large; after the 100-3000 Hz filter Large gives
   // ~0.35-0.4 uV peaks, as in clinical ANSD click printouts (90 dB nHL). Growth is linear up to 70 dB and compressive (0.5 dB/dB) above, so the CM
   // saturates at 90-100 dB instead of rising 10x and swamping wave I.
@@ -239,19 +249,22 @@
     const wavesMeta = {};
 
     const retroS = ear.path === 1 ? RETRO_S[ear.sev] : 0;
-    const ansdD = ear.path === 2 ? ANSD_D[ear.sev] : 0;
+    const ansd = ear.path === 2 ? ANSD[ear.sev] : null;
+    if (ear.path === 2 && !ansd) return sig;                          // marked ANSD: no neural response
+    const ansdLim = ansd ? inp.level - (bone ? 0 : inp.gap) - ansd.T - (f ? ANSD_TONE_T : 0) : Infinity;
+    const excite = (ci) => Math.min(excitation(inp, stim, ci, ear), ansdLim);
 
     const morph = f ? {} : (MORPH[ear.morph] || MORPH[0]);
     /* Tone bursts are treated as one response: its size and wave V latency follow the best-excited place (Emax; the tone
      * place in a normal ear, Neely et al. 1988 latency as a function of level), and the amplitude is shared out over the
      * excited CF channels, each keeping its travelling-wave delay relative to the tone place. Summing independent
      * channels made the V-V' grow too steeply with level (more channels joining) and V drift later again above ~70 dB. */
-    const Eex = CH_CF.map((cf, ci) => { const E = excitation(inp, stim, ci, ear); return E > 0 ? E * (1 + 0.6 * clamp(interp(ear.bc, cf) / 60, 0, 1)) : 0; });
+    const Eex = CH_CF.map((cf, ci) => { const E = excite(ci); return E > 0 ? E * (1 + 0.6 * clamp(interp(ear.bc, cf) / 60, 0, 1)) : 0; });
     const Emax = Math.max(...Eex);
     const wTone = Eex.map((E) => (E > 0 ? Math.exp(-(Emax - E) / 12) : 0));
     const wSum = wTone.reduce((x, y) => x + y, 0) || 1;
     for (let ci = 0; ci < CH_CF.length; ci++) {
-      const E = excitation(inp, stim, ci, ear);
+      const E = excite(ci);
       if (E <= 0) continue;
       const bcHL = interp(bone ? ear.bc : ear.bc, CH_CF[ci]);
       const rec = 0.6 * clamp(bcHL / 60, 0, 1);             // recruitment (sensorineural part only)
@@ -259,7 +272,7 @@
       // tone bursts: slower saturation (TAU_TONE) and an onset offset so a detectable (~2x residual noise) response exists at threshold
       const a = f ? 1 - Math.exp(-(Emax + interp(TONE_ONSET, f)) / TAU_TONE) : 1 - Math.exp(-Ee / TAU_A);
       const w = f ? TONE_W * wTone[ci] / wSum : CH_W[ci] / 5.2;
-      const jit = (0.05 + 0.25 * Math.exp(-Ee / 25)) * (1 + 6 * ansdD);
+      const jit = (0.05 + 0.25 * Math.exp(-Ee / 25)) * (ansd ? ansd.j : 1);
       for (const k of WAVES) {
         const W = WV[k];
         let amp = W.A * w * Math.pow(a, f ? 1 : W.p);   // tone bursts: near-linear growth with level
@@ -267,7 +280,8 @@
         if (!ipsi) amp *= W.cg;
         amp *= adultAmp(p, k);
         // rate: I/III/II adapt more than V
-        const rateAmp = { I: 0.30, II: 0.30, III: 0.25, IV: 0.15, V: 0.10 }[k] * (1 + 1.5 * retroS);
+        // (ANSD: neural response falls off more at fast rates, BCEHP 2022 5.4)
+        const rateAmp = { I: 0.30, II: 0.30, III: 0.25, IV: 0.15, V: 0.10 }[k] * (1 + 1.5 * retroS) * (ansd ? 2 : 1);
         amp *= 1 - rateAmp * (rf > 0 ? rf : rf * 0.4);
         if (cond && (k === 'I' || k === 'II')) amp *= 0.92;
         // pathology
@@ -276,7 +290,8 @@
           if (k === 'IV' || k === 'V') amp *= clamp(1 - 0.4 * retroS, 0.1, 1);
           if (retroS > 1.2 && k !== 'I' && k !== 'II') amp *= 0.15;
         }
-        if (ansdD) amp *= Math.pow(1 - ansdD, 1.5);
+        // ANSD: condensation response smaller and later, so alternating partly cancels (UNHSEIP 5.37, BCEHP 2022 5.6)
+        if (ansd) amp *= ansd.g * ANSD_WAVE[k] * (cond ? 0.7 : 1);
         const mo = morph[k] || {};
         if (mo.a) amp *= mo.a;
         // timing
@@ -284,7 +299,7 @@
                + ageShift(p, k) + pathShift(ear, k) + overrideShift(p, c, k) + tubeShift
                + (ipsi ? 0 : W.cd)
                + rf * { I: 0.10, II: 0.13, III: 0.20, IV: 0.28, V: 0.35 }[k] * (1 + 1.5 * retroS)
-               + (cond ? 0.06 : 0) + (mo.dt || 0);
+               + (cond ? (ansd ? 0.36 : 0.06) : 0) + (mo.dt || 0);
         // Tone bursts: the response is spread in time by the burst itself, so the V-V' complex is broad and slow at low
         // frequencies (~1 ms sigma at 0.5 kHz, ~0.25 ms at 2 kHz) and the trough after V is later and wider.
         const senv = f ? 0.5 * 1000 / f : 0;

@@ -61,6 +61,15 @@ Literature anchors (do not change casually — each constant is fitted to a sour
   ~4 ms). The stimulus artefact is electrical (t = 0, no tube delay), so `stim.clamped` (no sound to either cochlea)
   keeps it while CM and neural responses vanish (UNHSEIP 5.36 clamp test); condensation artefact is 0.75x rarefaction
   so alternating leaves a residual (BCEHP 2022).
+- ANSD (`path` 2, `ANSD[sev]`): the neural response has its own onset `T` (dB nHL, +`ANSD_TONE_T` for tones) independent of
+  the audiogram; excitation is clamped to `level - gap - T`, so V is small, late and broad near onset (no separate delay term).
+  Waves I/II mostly absent (`ANSD_WAVE`; clear I + late V would read as retrocochlear), condensation smaller/later so alt
+  partly cancels, extra rate adaptation. V-V' is measured as the larger of RC and CC (BCEHP 2022 5.6). Measured on the two
+  partial-ANSD presets (90 dB nHL click, 30% noise, 2000 sweeps): Mild CM 421 nV, RC V 7.25 ms / ~198 nV (Table 5.10.1
+  Probable; Fig 5.7.1 late V), confidence 100 / 100 / ~80 / ~4% at 90 / 80 / 70 / 60 dB, 2 kHz at 80 dB ~20% (small, V > 10 ms:
+  5.2 entry criterion); Moderate CM 597 nV, RC V 7.75 ms / ~91 nV (Definite), confidence ~90% at 90 dB, ~25% at 80, 2 kHz NR.
+  Severe gives only a trace at 100 dB; Marked none. Alternating A/B repro is ~0 with a large CM (A = RC, B = CC), so use
+  confidence/Fmp for ANSD. Re-run this check if `ANSD` changes.
 - Click morphology (`MORPH`, per ear `morph` 0-4) scales/shifts waves II-V; `calibrate()` runs on Standard (0).
   PAM (`ear.pam`) is a myogenic 9-12 ms hump (adult, AC). `normalLI()` gives model-derived normal L-I bands
   (+/- 2 SD, V SD from Gorga 1989 Table 2).
