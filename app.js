@@ -41,9 +41,10 @@
   const stamp = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   function logEv(msg) { S.log.push({ t: new Date(), page: S.page + 1, msg }); }
   const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s`;
-  const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C' };
-  const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C' };
-  const POL_TAG = { rare: 'rar.', cond: 'con.', alt: 'alt.', sub: 'R−C' };
+  // 'add': merged / added curves of different polarities (no single polarity to show)
+  const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C', add: 'Added' };
+  const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C', add: '+' };
+  const POL_TAG = { rare: 'rar.', cond: 'con.', alt: 'alt.', sub: 'R−C', add: 'added' };
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
@@ -183,7 +184,7 @@
     items.nSlots = slot;
     return items;
   }
-  const L_MARGIN = 108, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
+  const L_MARGIN = 92, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
   function layout(cv, ear, forReport) {
     const W = cv.clientWidth, H = cv.clientHeight;
     const items = paneItems(ear, forReport);
@@ -618,7 +619,7 @@
     S.mergeCount = (S.mergeCount || 0) + 1;
     logEv(`${{ merge: 'Merged', add: 'Added', sub: 'Subtracted' }[mode]} ${a.label} ${mode === 'sub' ? '−' : '+'} ${b.label}`);
     const t = {
-      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
+      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim.polarity !== b.stim.polarity ? Object.assign({}, a.stim, { polarity: 'add' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
       label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
       ch, n: nt, rejected: (a.rejected * na + b.rejected * nb) / nt, rn, ...curveStats(ch, rn)
     };
