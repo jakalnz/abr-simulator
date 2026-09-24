@@ -43,6 +43,7 @@
   const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s`;
   const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C' };
   const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C' };
+  const POL_TAG = { rare: 'rar.', cond: 'con.', alt: 'alt.', sub: 'R−C' };
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
@@ -158,6 +159,7 @@
     F: (a, b) => a.stim.freq - b.stim.freq || b.stim.level - a.stim.level || a.id - b.id,
     I: (a, b) => b.stim.level - a.stim.level || a.stim.freq - b.stim.freq || a.id - b.id
   };
+  const AB_COL = { A: '#1f9d9d', B: '#2b8a2b' };                      // A/B buffers (alternating: A = rarefaction, B = condensation)
   const PALETTE = [null, '#7b2d8e', '#d2691e', '#1e8a5a', '#a0a000'];   // colours for overlaid replicates (null = ear colour)
   function paneItems(ear, forReport) {
     const list = S.traces.filter((t) => t.ear === ear && !t.hidden);
@@ -181,7 +183,7 @@
     items.nSlots = slot;
     return items;
   }
-  const L_MARGIN = 92, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
+  const L_MARGIN = 108, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
   function layout(cv, ear, forReport) {
     const W = cv.clientWidth, H = cv.clientHeight;
     const items = paneItems(ear, forReport);
@@ -222,7 +224,7 @@
       let base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);
       const bmin = T_MARGIN + 10, bmax = h - B_MARGIN - 10;
       if (base < bmin || base > bmax) { base = Math.max(bmin, Math.min(bmax, base)); if (!forReport && t.dy) t.dy[it.chan] = base - lay.base(it.slot); }
-      const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
+      const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = t.col || PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
       lay.ys[i] = base; lay.tagY[i] = tagY;
       const sel = S.sel === t && !forReport, isC = it.chan === 1;
       const ys = (v) => base - v * 1000 / 200 * px200;
@@ -233,14 +235,21 @@
         for (let k = 0; k < arr.length; k++) { const px = x(W0 + k * DT), py = ys(arr[k]); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
         ctx.stroke(); ctx.restore();
       };
-      if (S.showAB && t.n > 0) { line(d.A, '#1f9d9d', 1); line(d.B, '#2b8a2b', 1); }
+      if (S.showAB && t.n > 0 && t.repro != null) { line(d.A, AB_COL.A, 1); line(d.B, AB_COL.B, 1); }
       line(d.avg, ecol, sel ? 2.4 : 1.5, isC ? [5, 3] : null, isC ? 0.55 : 1);
       // label tag
       ctx.fillStyle = sel ? ecol : (isC ? '#999' : '#fff'); ctx.strokeStyle = isC ? '#999' : ecol; ctx.lineWidth = 1;
       ctx.fillRect(4, tagY - 8, L_MARGIN - 20, 16); ctx.strokeRect(4, tagY - 8, L_MARGIN - 20, 16);
-      ctx.fillStyle = sel || isC ? '#fff' : ecol; ctx.font = '11px Segoe UI'; ctx.textAlign = 'left';
-      ctx.fillText(it.label + (t.live ? '*' : ''), 8, tagY + 4);
-      if (S.showAB && t.n > 0 && !t.live) { ctx.fillStyle = '#2b8a2b'; ctx.fillText('A/B', w - R_MARGIN - 26, tagY - 4); }
+      ctx.fillStyle = sel || isC ? '#fff' : ecol; ctx.textAlign = 'left';
+      // polarity at the right of the tag (rar. / con. / alt. / R−C); the label shrinks to fit beside it
+      const pol = POL_TAG[t.stim.polarity] || '', tagR = L_MARGIN - 19, txt = it.label + (t.live ? '*' : '');
+      ctx.font = '9px Segoe UI'; const pw = pol ? ctx.measureText(pol).width + 5 : 0;
+      let fs = 11; ctx.font = fs + 'px Segoe UI';
+      while (fs > 8 && ctx.measureText(txt).width > tagR - 8 - pw - 2) ctx.font = --fs + 'px Segoe UI';
+      ctx.fillText(txt, 8, tagY + 4);
+      if (pol) { ctx.font = '9px Segoe UI'; ctx.textAlign = 'right'; ctx.globalAlpha = 0.8; ctx.fillText(pol, tagR - 2, tagY + 4); ctx.globalAlpha = 1; ctx.textAlign = 'left'; }
+      ctx.font = '11px Segoe UI';
+      if (S.showAB && t.n > 0 && !t.live && t.repro != null) { ctx.fillStyle = '#2b8a2b'; ctx.fillText('A/B', w - R_MARGIN - 26, tagY - 4); }
       // wave marks
       if (!isC) for (const k of WAVES) {
         const tm = t.marks && t.marks[k]; if (tm == null) continue;
@@ -274,8 +283,8 @@
     $('recV').textContent = $('stRec').textContent = t ? t.n : 0;
     $('rnV').textContent = t && t.n ? t.rn.toFixed(0) + ' nV' : '--';
     $('stRej').textContent = t ? Math.round(t.rejected * 100) + '%' : '0%';
-    const rp = t ? Math.round(t.repro * 100) : 0;
-    $('stRep').textContent = rp + '%'; $('repBar').style.width = rp + '%';
+    const rp = t && t.repro != null ? Math.round(t.repro * 100) : 0;
+    $('stRep').textContent = t && t.repro == null ? '--' : rp + '%'; $('repBar').style.width = rp + '%';
     $('progFill').style.width = (t ? Math.min(100, t.n / 40) : 0) + '%';     // 0-4000 sweeps
     renderLat(); renderLabelUI();
   }
@@ -585,6 +594,7 @@
       add(`Subtract (${prev.label} − ${tr.label}) / 2 (shows CM: rarefaction − condensation)`, () => combine(prev, tr, 'sub'));
     }
     if (tr.parts) add('Unmerge', () => unmerge(tr));
+    if (tr.stim.polarity === 'alt' && tr.n > 0) add('Split into rarefaction (A) and condensation (B) curves', () => splitAB(tr));
     add(tr.hidden ? 'Show' : 'Hide', () => (tr.hidden = !tr.hidden));
     add(S.chan === 'both' ? 'Ipsilateral only' : 'Show contralateral (Ipsi / Contra)', () => { S.chan = S.chan === 'both' ? 'ipsi' : 'both'; syncUI(); });
     if (Object.keys(tr.marks).length) add('Remove wave labels', () => { tr.marks = {}; if (S.selMark && S.selMark.tr === tr) S.selMark = null; });
@@ -605,7 +615,45 @@
     const mix = (x, y) => { const o = new Float64Array(NWc); for (let i = 0; i < NWc; i++) o[i] = wa * x[i] + wb * y[i]; return o; };
     const ch = [0, 1].map((k) => ({ avg: mix(a.ch[k].avg, b.ch[k].avg), A: mix(a.ch[k].A, b.ch[k].A), B: mix(a.ch[k].B, b.ch[k].B) }));
     const rn = !(a.rn > 0 && b.rn > 0) ? 0 : sub ? 0.5 * Math.hypot(a.rn, b.rn) : 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
-    // reproducibility of the new A/B split (1-10 ms) and an Fmp-like statistic from the combined average
+    S.mergeCount = (S.mergeCount || 0) + 1;
+    logEv(`${{ merge: 'Merged', add: 'Added', sub: 'Subtracted' }[mode]} ${a.label} ${mode === 'sub' ? '−' : '+'} ${b.label}`);
+    const t = {
+      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
+      label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
+      ch, n: nt, rejected: (a.rejected * na + b.rejected * nb) / nt, rn, ...curveStats(ch, rn)
+    };
+    if (a.repro == null || b.repro == null) t.repro = null;   // split halves have no A/B of their own
+    if (mode === 'merge') {                   // merge replaces the two curves (can be unmerged)
+      t.parts = [a, b];
+      const at = Math.min(S.traces.indexOf(a), S.traces.indexOf(b));
+      S.traces = S.traces.filter((x) => x !== a && x !== b);
+      S.traces.splice(Math.max(0, at), 0, t);
+      toast('Merged ' + a.label + ' + ' + b.label + ' (right-click > Unmerge to undo)');
+    } else {                                  // add / subtract keep both originals visible
+      S.traces.push(t);
+      toast((sub ? 'Subtracted ' + a.label + ' − ' : 'Added ' + a.label + ' + ') + b.label + ' as ' + t.label + ' (originals kept)');
+    }
+    S.sel = t;
+  }
+  /* Split an alternating curve into its rarefaction (buffer A) and condensation (buffer B) averages as two separate curves
+   * (original kept), so they can be dragged over each other to compare: the CM inverts, neural waves do not. Each half has
+   * ~half the sweeps, so RN is ~1.4x the original; it has no A/B split of its own, so reproducibility is not available. */
+  function splitAB(t) {
+    const rn = t.rn * Math.SQRT2;
+    const mk = (k, pol) => {
+      const ch = t.ch.map((c) => { const v = Float64Array.from(c[k]); return { avg: v, A: v, B: v }; });
+      return { id: S.nextId++, base: t.base, ear: t.ear, stim: Object.assign({}, t.stim, { polarity: pol }), w1: t.w1, opts: t.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
+               label: t.label + ' ' + k, col: AB_COL[k], ch, n: Math.round(t.n / 2), rejected: t.rejected, rn, ...curveStats(ch, rn), repro: null };
+    };
+    const a = mk('A', 'rare'), b = mk('B', 'cond');
+    S.traces.splice(S.traces.indexOf(t) + 1, 0, a, b);
+    S.sel = a;
+    logEv(`Split ${t.label} into ${a.label} (rarefaction) and ${b.label} (condensation)`);
+    toast(`Split ${t.label}: ${a.label} = rarefaction, ${b.label} = condensation. Drag a tag to overlay them.`);
+  }
+  /* reproducibility of the A/B split (1-10 ms; tone bursts around wave V) and an Fmp-like statistic from the average */
+  function curveStats(ch, rn) {
+    const NWc = ch[0].avg.length;
     let ta = 1, tb = 10;
     if (NWc > M.NW) {                     // tone burst: statistics around the wave V-V' peak of the combined average
       let bi = Math.round((5 - W0) / DT); const av = ch[0].avg;
@@ -620,25 +668,7 @@
     for (let i = i0; i < i1; i++) { const x = ch[0].A[i] - ma, y = ch[0].B[i] - mb; sab += x * y; saa += x * x; sbb += y * y; }
     let pw = 0; for (let i = i0; i < i2; i++) pw += ch[0].avg[i] * ch[0].avg[i]; pw /= (i2 - i0);
     const rnU = Math.max(rn / 1000, 1e-4), fmp = (pw + rnU * rnU) / (rnU * rnU);
-    S.mergeCount = (S.mergeCount || 0) + 1;
-    logEv(`${{ merge: 'Merged', add: 'Added', sub: 'Subtracted' }[mode]} ${a.label} ${mode === 'sub' ? '\u2212' : '+'} ${b.label}`);
-    const t = {
-      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
-      label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
-      ch, n: nt, rejected: (a.rejected * na + b.rejected * nb) / nt, rn,
-      repro: saa && sbb ? Math.max(0, sab / Math.sqrt(saa * sbb)) : 0, fmp, conf: Math.min(99.9, (1 - Math.exp(-2.2 * Math.max(0, fmp - 1))) * 100)
-    };
-    if (mode === 'merge') {                   // merge replaces the two curves (can be unmerged)
-      t.parts = [a, b];
-      const at = Math.min(S.traces.indexOf(a), S.traces.indexOf(b));
-      S.traces = S.traces.filter((x) => x !== a && x !== b);
-      S.traces.splice(Math.max(0, at), 0, t);
-      toast('Merged ' + a.label + ' + ' + b.label + ' (right-click > Unmerge to undo)');
-    } else {                                  // add / subtract keep both originals visible
-      S.traces.push(t);
-      toast((sub ? 'Subtracted ' + a.label + ' − ' : 'Added ' + a.label + ' + ') + b.label + ' as ' + t.label + ' (originals kept)');
-    }
-    S.sel = t;
+    return { repro: saa && sbb ? Math.max(0, sab / Math.sqrt(saa * sbb)) : 0, fmp, conf: Math.min(99.9, (1 - Math.exp(-2.2 * Math.max(0, fmp - 1))) * 100) };
   }
   function unmerge(t) {
     if (!t.parts) return;
@@ -762,7 +792,7 @@
     for (const t of rows) {
       h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}${t.stim.clamped ? ' (clamped)' : ''}</td>` +
         `<td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td>` +
-        `<td>${t.n}</td><td>${Math.round(t.rejected * 100)}%</td><td>${Math.round(t.repro * 100)}%</td><td>${t.fmp ? t.fmp.toFixed(1) : '--'}</td><td>${t.n ? t.conf.toFixed(1) + '%' : '--'}</td><td>${t.rn ? t.rn.toFixed(0) + ' nV' : '--'}</td></tr>`;
+        `<td>${t.n}</td><td>${Math.round(t.rejected * 100)}%</td><td>${t.repro == null ? '--' : Math.round(t.repro * 100) + '%'}</td><td>${t.fmp ? t.fmp.toFixed(1) : '--'}</td><td>${t.n ? t.conf.toFixed(1) + '%' : '--'}</td><td>${t.rn ? t.rn.toFixed(0) + ' nV' : '--'}</td></tr>`;
     }
     const li = liChartsHTML('rli');
     h += `</table></div><div class="rep-sec"><h3>Latencies (ms)</h3>${latTableHTML(markedRows())}</div>
