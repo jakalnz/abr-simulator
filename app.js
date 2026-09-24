@@ -208,7 +208,11 @@
     const drawOrder = items.map((_, i) => i).sort((a, b) => (items[a].tr === S.sel && !forReport) - (items[b].tr === S.sel && !forReport));
     drawOrder.forEach((i) => {
       const it = items[i];
-      const t = it.tr, d = t.ch[it.chan], base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);   // report ignores manual offsets so no curve leaves the plot
+      const t = it.tr, d = t.ch[it.chan];
+      // manual offsets (report ignores them) are limited so the baseline and its tag stay inside the plot and can be grabbed again
+      let base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);
+      const bmin = T_MARGIN + 10, bmax = h - B_MARGIN - 10;
+      if (base < bmin || base > bmax) { base = Math.max(bmin, Math.min(bmax, base)); if (!forReport && t.dy) t.dy[it.chan] = base - lay.base(it.slot); }
       const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
       lay.ys[i] = base; lay.tagY[i] = tagY;
       const sel = S.sel === t && !forReport, isC = it.chan === 1;
