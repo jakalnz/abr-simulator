@@ -1,6 +1,6 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body { font: 12px "Segoe UI", Tahoma, sans-serif; background: #ececec; color: #111; display: flex; flex-direction: column; }
+body { font: 12px "Segoe UI", Tahoma, sans-serif; background: #ececec; color: #111; display: flex; flex-direction: column; min-width: 1100px; }   /* fixed Eclipse layout: small windows scroll rather than stack */
 #titlebar { background: #fff; border-bottom: 1px solid #bbb; padding: 4px 10px; font-weight: 600; }
 #caseName { font-weight: 400; color: #555; margin-left: 12px; }
 #toolbar { background: linear-gradient(#f7f7f7, #dcdcdc); border-bottom: 1px solid #aaa; padding: 4px 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -11,6 +11,9 @@ button:hover { background: #eef4fb; }
 button.go { background: linear-gradient(#e8f6e8, #b9deb9); border-color: #5a9a5a; }
 button.big { padding: 8px 12px; font-size: 14px; flex: 1; }
 button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #b05454; }
+#sizeHint { background: #fff4c2; border-bottom: 1px solid #d9b84a; padding: 4px 10px; display: flex; align-items: center; gap: 8px; }
+#sizeHint[hidden] { display: none; }
+#sizeHint #shClose { margin-left: auto; padding: 0 7px; font-size: 14px; line-height: 18px; }
 #main { flex: 1; display: flex; min-height: 0; }
 #left { width: 320px; flex: none; background: #f4f4f4; border-right: 1px solid #aaa; display: flex; flex-direction: column; overflow-y: auto; }
 .tabs { display: flex; }
@@ -95,7 +98,7 @@ table.lat th, #reportBody th { background: #eee; }
 /* print: only the report, flowing over as many pages as needed (the old visibility:hidden + absolute inset:0 clipped it to one page) */
 @page { size: A4; margin: 10mm; }
 @media print {
-  html, body { height: auto; display: block; background: #fff; }
+  html, body { height: auto; display: block; background: #fff; min-width: 0; }
   body > *:not(#mReport) { display: none !important; }
   #mReport { position: static; display: block; overflow: visible; padding: 0; background: #fff; }
   #mReport .mbox { width: auto; border: 0; padding: 0; background: #fff; }
@@ -104,7 +107,6 @@ table.lat th, #reportBody th { background: #eee; }
   #reportBody h3 { break-after: avoid; }
   #reportBody table { font-size: 10px; }
 }
-@media (max-width: 900px) { #main { flex-direction: column; } #left { width: 100%; } #graphs { flex-direction: column; } }
 
 .lockbar { display: flex; gap: 6px; align-items: center; background: #fff; border: 1px solid #ccc; padding: 4px 8px; margin-bottom: 8px; }
 .lockbar .err { color: #b00; } .lockbar #pRelock { margin-left: auto; }

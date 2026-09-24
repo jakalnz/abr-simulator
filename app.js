@@ -839,7 +839,19 @@
     document.addEventListener('click', () => ($('ctx').hidden = true));
     $('btnLatAll').onclick = openLatAll; $('btnLI').onclick = openLI; $('popClose').onclick = () => ($('mPop').hidden = true); $('popCopy').onclick = copyLatTable;
     $('btnReport').onclick = openReport; $('rClose').onclick = () => ($('mReport').hidden = true); $('rPrint').onclick = () => window.print();
-    window.addEventListener('resize', render);
+    // nudge towards a maximised window: below ~1200 px (or clearly narrower than the screen) the panels reflow/stack
+    let shHidden = false;
+    try { shHidden = sessionStorage.getItem('abrSizeHint') === 'off'; } catch (e) { /* storage blocked */ }
+    const sizeHint = () => {
+      const small = window.innerWidth < 1200 || screen.availWidth - window.outerWidth > 80;
+      $('sizeHint').hidden = shHidden || !small || !!document.fullscreenElement;
+      $('shFull').hidden = !document.documentElement.requestFullscreen;
+    };
+    $('shFull').onclick = () => document.documentElement.requestFullscreen().catch(() => toast('Full screen not available: maximise the window instead (F11 in most browsers)'));
+    $('shClose').onclick = () => { shHidden = true; try { sessionStorage.setItem('abrSizeHint', 'off'); } catch (e) { /* ignore */ } sizeHint(); render(); };
+    document.addEventListener('fullscreenchange', () => { sizeHint(); render(); });
+    sizeHint();
+    window.addEventListener('resize', () => { sizeHint(); render(); });
     bindPatient();
     // shared case link
     const m = /case=([^&]+)/.exec(location.hash);
