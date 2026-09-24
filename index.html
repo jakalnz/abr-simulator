@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABR Simulator</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- installable web app, works offline (manifest + sw.js) -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6b7a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ABR Sim">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="titlebar"><span id="ttl">ABR Simulator</span><span id="caseName"></span></div>
+<div id="titlebar"><span id="ttl">ABR Simulator</span><span id="caseName"></span><button id="btnInstall" hidden title="Install as an app that also works offline">Install app (offline)</button></div>
 <div id="toolbar">
   <label>Protocol
     <select id="protocol">

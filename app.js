@@ -1002,6 +1002,16 @@
     initElectrodes(S.patient.electrodes); renderElec();
     syncUI(); setButtons(); renderList(); render();
     setInterval(drawEEG, 120);
+    // offline / installable web app: sw.js caches the app files (needs http(s); not available from file://)
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      const first = !navigator.serviceWorker.controller;
+      navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready)
+        .then(() => { if (first) toast('Saved for offline use'); }).catch(() => { /* offline support unavailable */ });
+    }
+    let installEvt = null;             // Chrome / Edge: offer an install button (Safari: Share > Add to Home Screen)
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('btnInstall').hidden = false; });
+    window.addEventListener('appinstalled', () => { $('btnInstall').hidden = true; toast('Installed: ABR Simulator now works offline'); });
+    $('btnInstall').onclick = () => { if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; $('btnInstall').hidden = true; }); } };
     window.ABRApp = S;   // exposed for debugging
   }
   init();

@@ -19,6 +19,11 @@ no build step, no dependencies (same approach as the other `jakalnz` simulators:
 | `js/model.js` | Physiology model + averager (`window.ABRModel`) |
 | `js/codec.js` | Versioned bit-packed `#case=` share codec (`window.ABRCodec`) |
 | `js/defaultPatients.js` | Fictional built-in cases (`window.DEFAULT_PATIENTS`) |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Installable offline web app (published at https://jakalnz.github.io/abr-simulator/) |
+
+Offline: `sw.js` precaches the app files and serves them stale-while-revalidate, so a deploy reaches users one load
+later without any version bump. Add new app files to `FILES` in `sw.js` (and bump `CACHE`), or they will not work offline.
+During local development the worker also caches localhost: use Ctrl+F5 (bypasses it) or unregister it in DevTools.
 
 ## Model (js/model.js)
 Channel-based auditory-nerve population model, not a full biophysical cochlea: 9 CF channels, each with an
