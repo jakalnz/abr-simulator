@@ -104,7 +104,7 @@
                            latI: null, latIII: null, latV: null }, o || {});
   }
   function newPatient(o) {
-    // noise = EEG noise multiplier; electrodes = start state 0 on as found, 1 difficult skin, 2 not attached (case settings)
+    // noise = EEG noise multiplier; electrodes = start state 0 on as found, 1 difficult skin, 2 not attached, 3 ready (case settings)
     const p = Object.assign({ name: 'New patient', adult: true, ageMonths: 4, noisy: false, noise: 0.3, electrodes: 0 }, o || {});
     p.ears = [newEar(o && o.ears && o.ears[0]), newEar(o && o.ears && o.ears[1])];
     return p;

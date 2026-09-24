@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   const VERSION = 4;                     // v2 adds the EEG-noise level (v1: 30%); v3 adds per-ear CM type, click morphology and PAM (older: 0);
-                                         // v4 adds the electrode start state (0 on as found, 1 difficult skin, 2 not attached; older: 0)
+                                         // v4 adds the electrode start state (0 on as found, 1 difficult skin, 2 not attached, 3 ready at 1.0 kOhm; older: 0)
   const NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1, 1.5, 2];
 
   class BitWriter {
@@ -61,7 +61,7 @@
       if (ver >= 3) { e.ring = r.read(1); e.morph = r.read(3); e.pam = r.read(2); } else { e.ring = 0; e.morph = 0; e.pam = 0; }
       p.ears.push(e);
     }
-    p.electrodes = ver >= 4 ? Math.min(2, r.read(2)) : 0;
+    p.electrodes = ver >= 4 ? r.read(2) : 0;
     const headBytes = Math.ceil(r.pos / 8);
     const len = bytes[headBytes];
     p.name = new TextDecoder().decode(bytes.slice(headBytes + 1, headBytes + 1 + len));

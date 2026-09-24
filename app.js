@@ -168,8 +168,9 @@
    * skin = site impedance an electrode gets when placed (lowered by prepping the skin, down to a floor); z = measured value. */
   const ELEC = [['Cz', 'Vertex / high forehead (+)'], ['M2', 'Right mastoid (−)'], ['M1', 'Left mastoid (−)'], ['Gnd', 'Ground (low forehead)']];
   const rnd = (a, b) => a + (b - a) * Math.random();
-  function initElectrodes(mode) {             // mode: 0 on as found, 1 on with difficult skin, 2 not attached
+  function initElectrodes(mode) {             // mode: 0 on as found, 1 on with difficult skin, 2 not attached, 3 ready (all 1.0)
     S.elec = {};
+    if (mode === 3) { for (const [k] of ELEC) S.elec[k] = { skin: 1, floor: 0.8, preps: 1, on: true, z: 1 }; return; }
     const bad = ELEC[Math.floor(Math.random() * 3)][0];     // as found: usually one site (not the ground) needs work
     for (const [k] of ELEC) {
       const skin = mode === 1 ? rnd(7, 20) : mode === 2 ? rnd(5, 15) : k === bad ? rnd(5.5, 11) : rnd(1.8, 4.5);

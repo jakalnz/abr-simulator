@@ -2,7 +2,7 @@
  * path: 0 none, 1 retrocochlear, 2 neuropathy (ANSD); sev 0-3; cm 0 absent .. 3 large; ring 1 = ringing CM;
  * latI/latIII/latV = optional manual latency (ms) at 80 dB nHL, 17.1/s. */
 window.DEFAULT_PATIENTS = [
-  { name: 'Normal hearing adult (asleep/quiet)', adult: true, ageMonths: 0, noisy: false,
+  { name: 'Normal hearing adult (asleep/quiet)', adult: true, ageMonths: 0, noisy: false, electrodes: 3,   // ready to test (demo)
     ears: [{ ac: [5, 5, 5, 5], bc: [0, 0, 0, 0] }, { ac: [5, 5, 5, 5], bc: [0, 0, 0, 0] }] },
   { name: 'Normal adult - noisy, awake', adult: true, ageMonths: 0, noisy: true,
     ears: [{ ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }, { ac: [10, 5, 5, 10], bc: [5, 0, 0, 5] }] },

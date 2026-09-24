@@ -82,7 +82,8 @@ Literature anchors (do not change casually — each constant is fitted to a sour
   filter gain (`humGain`: HPF 30 Hz lets far more through than 100 Hz); hum near the reject limit adds rejections from
   ~6 kOhm; high mean impedance enlarges movement bursts. Calibration (quiet infant, 30% noise, 2000 sweeps, click):
   ideal ~16 nV (vs 15 without), difference 2 kOhm ~19, 5 kOhm ~26, 10 kOhm ~40 nV + 20% rejects; 2 kHz tone bursts ~2x
-  worse. Start state is a case setting (`patient.electrodes`: 0 as found, 1 difficult skin, 2 not attached).
+  worse. Start state is a case setting (`patient.electrodes`: 0 as found, 1 difficult skin, 2 not attached, 3 ready: all 1.0 kOhm, used by the default
+  demo patient).
 - Click morphology (`MORPH`, per ear `morph` 0-4) scales/shifts waves II-V; `calibrate()` runs on Standard (0).
   PAM (`ear.pam`) is a myogenic 9-12 ms hump (adult, AC). `normalLI()` gives model-derived normal L-I bands
   (+/- 2 SD, V SD from Gorga 1989 Table 2).
