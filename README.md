@@ -25,7 +25,8 @@ http://localhost:8232. It can be hosted on GitHub Pages as-is.
 - **Analysis:** the Latency tab shows the selected curve's latencies and intervals, with pop-outs for the table of
   all curves and latency–intensity charts (grey normative bands); drag curves up and down by their tags; merge curves
   (weighted average, can be unmerged), add them (keeps the originals) or subtract rarefaction − condensation to show
-  the CM; export a waveform as CSV; print a report (all curves, recording statistics, latencies, L–I charts).
+  the CM; export a waveform as CSV; print a report (all curves, recording statistics, latencies, L–I charts and a
+  time-stamped test log of every recording, label, category, merge and deletion, for assessing the student's process).
 - **Patients:** adult or child (age in months), quiet asleep or noisy awake, 4-point air- and bone-conduction
   thresholds for each ear, retrocochlear pathology, auditory neuropathy with cochlear microphonic (brief or ringing),
   click morphology variants (II, IV/V complex, large III), an optional post-auricular muscle wave, and optional

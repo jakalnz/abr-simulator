@@ -18,7 +18,7 @@
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
-    tab: 'record', wave: null, nextId: 1, selMark: null, hover: null
+    tab: 'record', wave: null, nextId: 1, log: [], selMark: null, hover: null
   };
 
   /* ---------- helpers ---------- */
@@ -36,6 +36,11 @@
     sel.innerHTML = vals.map((v) => `<option value="${v}"${v === cur ? ' selected' : ''}>${fmt ? fmt(v) : v}</option>`).join('');
   }
   const fmtMs = (v) => (v == null ? '' : v.toFixed(2));
+  /* ---------- test log: what the student did and when (printed with the report) ---------- */
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const stamp = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  function logEv(msg) { S.log.push({ t: new Date(), page: S.page + 1, msg }); }
+  const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s`;
   const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C' };
   const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C' };
 
@@ -98,6 +103,7 @@
     S.acq = new M.Acquisition(S.patient, stim, { nMax: S.nmax, reject: S.reject, hp: S.hp, lp: S.lp, noise: S.noise });
     const { base, label } = labelFor(stim);
     S.live = { id: S.nextId++, base, label, ear: stim.ear, stim, dy: [0, 0], opts: { hp: S.hp, lp: S.lp }, live: true, marks: {}, hidden: false, ...blank(stim) };
+    logEv(`Start ${label}: ${stimText(stim)}, HPF/LPF ${S.hp}/${S.lp} Hz, ${S.nmax} sweeps, reject \u00b1${S.reject} \u00b5V`);
     S.paused = false; S.last = performance.now();
     S.timer = setInterval(tick, 60);
     setButtons(); render();
@@ -117,7 +123,9 @@
     if (S.acq && S.live && S.acq.n > 0) {
       Object.assign(S.live, S.acq.snapshot(), { live: false });
       S.traces.push(S.live); S.sel = S.live;
-    }
+      const t = S.live;
+      logEv(`${S.acq.done ? 'Completed' : 'Stopped'} ${t.label}: ${t.n} sweeps, rejected ${Math.round(t.rejected * 100)}%, RN ${t.rn.toFixed(0)} nV, Fmp ${t.fmp.toFixed(1)}, confidence ${t.conf.toFixed(1)}%, repro ${Math.round(t.repro * 100)}%`);
+    } else if (S.live) logEv(`Stopped ${S.live.label} before any sweeps (discarded)`);
     S.acq = null; S.live = null; S.paused = false;
     setButtons(); render(); renderList();
   }
@@ -127,6 +135,7 @@
     if (S.acq) { toast('Stop the recording before changing page'); return; }
     S.pages[S.page].traces = S.traces; S.pages[S.page].sel = S.sel;
     S.page = n; S.traces = S.pages[n].traces; S.sel = S.pages[n].sel;
+    logEv(`Switched to page ${n + 1}`);
     $('ctx').hidden = true; renderList(); render();
   }
   function renderPages() {
@@ -429,13 +438,13 @@
     for (let k = Math.max(1, c - half); k <= Math.min(arr.length - 2, c + half); k++) if (arr[k] > arr[best]) best = k;
     return W0 + best * DT;
   }
-  function placeMark(tr, wave, t) { tr.marks[wave] = t; S.selMark = { tr, wave }; S.wave = wave; }
+  function placeMark(tr, wave, t) { tr.marks[wave] = t; S.selMark = { tr, wave }; S.wave = wave; logEv(`Label ${wave} on ${tr.label} at ${t.toFixed(2)} ms`); }
   function curMark() {                             // the selected label, if it still exists
     const m = S.selMark;
     if (m && S.traces.includes(m.tr) && m.tr.marks[m.wave] != null) return m;
     S.selMark = null; return null;
   }
-  function setCat(tr, c) { if (!tr) { toast('Select a curve first'); return; } tr.cat = tr.cat === c ? null : c; }
+  function setCat(tr, c) { if (!tr) { toast('Select a curve first'); return; } tr.cat = tr.cat === c ? null : c; logEv(tr.cat ? `Category ${c} on ${tr.label}` : `Category ${c} removed from ${tr.label}`); }
   function nudge(steps) {
     let m = curMark();
     if (!m && S.sel && S.sel.marks[S.wave] != null) m = S.selMark = { tr: S.sel, wave: S.wave };
@@ -445,6 +454,7 @@
   }
   function removeMark(m) {
     if (!m) return;
+    logEv(`Removed label ${m.wave} from ${m.tr.label}`);
     delete m.tr.marks[m.wave];
     if (S.selMark && S.selMark.tr === m.tr && S.selMark.wave === m.wave) S.selMark = null;
   }
@@ -521,7 +531,10 @@
   });
   window.addEventListener('mouseup', () => {
     const m = S.mdrag;
-    if (m) { m.cv.style.cursor = 'crosshair'; S.dragMoved = m.moved; S.mdrag = null; setTimeout(() => (S.dragMoved = false), 0); return; }
+    if (m) {
+      if (m.moved && m.tr.marks[m.wave] != null) logEv(`Moved label ${m.wave} on ${m.tr.label} to ${m.tr.marks[m.wave].toFixed(2)} ms`);
+      m.cv.style.cursor = 'crosshair'; S.dragMoved = m.moved; S.mdrag = null; setTimeout(() => (S.dragMoved = false), 0); return;
+    }
     const d = S.drag; if (!d) return;
     d.cv.style.cursor = 'grab'; S.dragMoved = d.moved; S.drag = null;
     setTimeout(() => (S.dragMoved = false), 0);
@@ -579,7 +592,7 @@
     else CATS.forEach((c) => add(`Label ${c} (${CAT_NAME[c].toLowerCase()})`, () => (tr.cat = c)));
     add('Reset position', () => (tr.dy = [0, 0]));
     add('Export waveform (CSV)', () => exportCsv(tr));
-    add('Delete', () => { S.traces = S.traces.filter((t) => t !== tr); S.sel = null; });
+    add('Delete', () => { S.traces = S.traces.filter((t) => t !== tr); S.sel = null; logEv(`Deleted ${tr.label}`); });
     c.style.left = ev.clientX + 'px'; c.style.top = ev.clientY + 'px'; c.hidden = false;
   }
   /* merge = sweep-weighted average (grand average); add = arithmetic sum. Sources are kept so it can be unmerged. */
@@ -608,6 +621,7 @@
     let pw = 0; for (let i = i0; i < i2; i++) pw += ch[0].avg[i] * ch[0].avg[i]; pw /= (i2 - i0);
     const rnU = Math.max(rn / 1000, 1e-4), fmp = (pw + rnU * rnU) / (rnU * rnU);
     S.mergeCount = (S.mergeCount || 0) + 1;
+    logEv(`${{ merge: 'Merged', add: 'Added', sub: 'Subtracted' }[mode]} ${a.label} ${mode === 'sub' ? '\u2212' : '+'} ${b.label}`);
     const t = {
       id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
       label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
@@ -631,6 +645,7 @@
     const at = S.traces.indexOf(t);
     S.traces.splice(at, 1, ...t.parts);
     S.sel = t.parts[0];
+    logEv(`Unmerged ${t.label}`);
     toast('Unmerged ' + t.label);
   }
   function exportCsv(tr) {
@@ -689,6 +704,7 @@
   function setPatient(p) {
     if (S.acq) stop();
     S.patient = M.newPatient(JSON.parse(JSON.stringify(p))); S.noise = S.patient.noise;
+    logEv(`Patient set: ${S.patient.name} (recordings cleared)`);
     S.pages.forEach((p) => { p.traces = []; p.sel = null; }); S.traces = S.pages[S.page].traces; S.sel = null; S.live = null;
     syncUI(); renderList(); render();
   }
@@ -728,6 +744,12 @@
   }
 
   /* ---------- report ---------- */
+  function logHTML() {
+    if (!S.log.length) return '<div class="hint">Nothing recorded yet.</div>';
+    const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    return '<table class="log"><tr><th>#</th><th>Date and time</th><th>Page</th><th>Action</th></tr>' +
+      S.log.map((e, i) => `<tr><td>${i + 1}</td><td>${stamp(e.t)}</td><td>${e.page}</td><td class="l">${esc(e.msg)}</td></tr>`).join('') + '</table>';
+  }
   function openReport() {
     const rows = S.traces.filter((t) => !t.hidden), p = S.patient;
     // graph height grows with the number of curve slots so every curve is printed
@@ -744,7 +766,8 @@
     }
     const li = liChartsHTML('rli');
     h += `</table></div><div class="rep-sec"><h3>Latencies (ms)</h3>${latTableHTML(markedRows())}</div>
-      <div class="rep-sec"><h3>Latency&ndash;intensity</h3>${li.html}</div>`;
+      <div class="rep-sec"><h3>Latency&ndash;intensity</h3>${li.html}</div>
+      <div class="rep-sec"><h3>Test log</h3>${logHTML()}</div>`;
     $('reportBody').innerHTML = h;
     $('mReport').hidden = false;
     requestAnimationFrame(() => { draw($('rc0'), 0, 'x'); draw($('rc1'), 1, 'x'); li.gs.forEach((g, i) => drawLI($('rli' + i), g, 2)); });
@@ -787,7 +810,7 @@
     $('lvlUp').onclick = () => { S.level += 5; clampLevel(); syncUI(); };
     $('lvlDn').onclick = () => { S.level -= 5; clampLevel(); syncUI(); };
     $('btnStart').onclick = () => (S.acq ? stop() : start());
-    $('btnPause').onclick = () => { S.paused = !S.paused; setButtons(); };
+    $('btnPause').onclick = () => { S.paused = !S.paused; if (S.live) logEv(`${S.paused ? 'Paused' : 'Resumed'} ${S.live.label} at ${S.live.n} sweeps`); setButtons(); };
     $('chanSel').onchange = () => { S.chan = $('chanSel').value; syncUI(); render(); };
     $('showAB').onchange = () => { S.showAB = $('showAB').checked; syncUI(); render(); };
     $('tbAB').onclick = () => { S.showAB = !S.showAB; syncUI(); render(); };
@@ -805,8 +828,8 @@
     }));
     document.querySelectorAll('.zUp').forEach((b) => (b.onclick = () => { S.zoom *= 1.25; render(); }));   // one scale for both ears
     document.querySelectorAll('.zDn').forEach((b) => (b.onclick = () => { S.zoom /= 1.25; render(); }));
-    $('btnDel').onclick = () => { if (S.sel) { S.traces = S.traces.filter((t) => t !== S.sel); S.sel = null; renderList(); render(); } };
-    $('btnClear').onclick = () => { S.traces = []; S.sel = null; renderList(); render(); };
+    $('btnDel').onclick = () => { if (S.sel) { logEv(`Deleted ${S.sel.label}`); S.traces = S.traces.filter((t) => t !== S.sel); S.sel = null; renderList(); render(); } };
+    $('btnClear').onclick = () => { if (S.traces.length) logEv(`Cleared all ${S.traces.length} curves on page ${S.page + 1}`); S.traces = []; S.sel = null; renderList(); render(); };
     $('btnClrMarks').onclick = () => { if (S.sel) { S.sel.marks = {}; S.sel.cat = null; S.selMark = null; render(); } };
     $('btnUnmerge').onclick = () => { if (S.sel && S.sel.parts) { unmerge(S.sel); renderList(); render(); } else toast('Select a merged curve first'); };
     for (let i = 0; i < 9; i++) { const b = document.createElement('button'); b.textContent = i + 1; b.onclick = () => switchPage(i); $('pageBtns').appendChild(b); }
@@ -821,6 +844,7 @@
     // shared case link
     const m = /case=([^&]+)/.exec(location.hash);
     if (m) { try { S.patient = M.newPatient(window.ABRCodec.decode(m[1])); S.noise = S.patient.noise; } catch (err) { toast('Could not read shared case: ' + err.message); } }
+    logEv(`Session started: patient ${S.patient.name}${m ? ' (shared case link)' : ''}`);
     syncUI(); setButtons(); renderList(); render();
     setInterval(drawEEG, 120);
     window.ABRApp = S;   // exposed for debugging

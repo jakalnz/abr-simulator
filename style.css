@@ -91,6 +91,7 @@ table.lat th, #reportBody th { background: #eee; }
 #reportBody .rep-graphs canvas { width: 100%; display: block; }
 #reportBody .li-charts { grid-template-columns: 1fr 1fr; }
 #reportBody .li-charts canvas { height: 300px; }
+#reportBody table.log td { font-size: 11px; } #reportBody table.log td.l { text-align: left; }
 /* print: only the report, flowing over as many pages as needed (the old visibility:hidden + absolute inset:0 clipped it to one page) */
 @page { size: A4; margin: 10mm; }
 @media print {
