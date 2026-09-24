@@ -61,8 +61,8 @@ button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #
 .ptitle.r { color: #a11; } .ptitle.l { color: #22a; }
 .pane .cvwrap { flex: 1; position: relative; display: flex; min-height: 260px; }
 .pane canvas { flex: 1; width: 100%; min-height: 260px; display: block; cursor: crosshair; }
-/* scale buttons sit under the +200 nV label (canvas y ~38); both change the shared scale */
-.zbtns { position: absolute; left: 5px; top: 44px; display: inline-flex; }
+/* scale buttons sit above the +200 nV label, in the empty strip over the curve tags; both change the shared scale */
+.zbtns { position: absolute; left: 5px; top: 5px; display: inline-flex; }
 .zbtns button { padding: 0 6px; font-size: 10px; line-height: 16px; border-radius: 0; margin-left: -1px; }
 .zbtns button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; } .zbtns button:last-child { border-radius: 0 3px 3px 0; }
 table.lat, #reportBody table { border-collapse: collapse; width: 100%; }

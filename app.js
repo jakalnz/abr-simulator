@@ -173,17 +173,16 @@
     return items;
   }
   const L_MARGIN = 92, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
-  const T_SLOTS = 30;                  // curves start this far below the plot top, clear of the +200 nV label and scale buttons
   function layout(cv, ear, forReport) {
     const W = cv.clientWidth, H = cv.clientHeight;
     const items = paneItems(ear, forReport);
-    const plotH = H - T_MARGIN - B_MARGIN - T_SLOTS;
+    const plotH = H - T_MARGIN - B_MARGIN;
     const w1 = items.reduce((m, it) => Math.max(m, it.tr.w1 || W1), W1);
     const slot = Math.min(120, plotH / Math.max(items.nSlots || 1, 1));
     return { W, H, items, slot, plotH, w1, px200: S.zoom * Math.min(40, Math.max(12, slot * 0.3)),
              x: (t) => L_MARGIN + (t - W0) / (w1 - W0) * (W - L_MARGIN - R_MARGIN),
              tOf: (x) => W0 + (x - L_MARGIN) / (W - L_MARGIN - R_MARGIN) * (w1 - W0),
-             base: (i) => T_MARGIN + T_SLOTS + (i + 0.62) * slot };     // baseline below the slot centre: waves I-V rise further than the trough falls
+             base: (i) => T_MARGIN + (i + 0.62) * slot };     // baseline below the slot centre: waves I-V rise further than the trough falls
   }
   function draw(cv, ear, forReport) {
     const dpr = forReport ? 2 : window.devicePixelRatio || 1;     // report canvases at 2x so the printout stays sharp
@@ -212,7 +211,7 @@
       const t = it.tr, d = t.ch[it.chan];
       // manual offsets (report ignores them) are limited so the baseline and its tag stay inside the plot and can be grabbed again
       let base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);
-      const bmin = T_MARGIN + T_SLOTS + 4, bmax = h - B_MARGIN - 10;
+      const bmin = T_MARGIN + 10, bmax = h - B_MARGIN - 10;
       if (base < bmin || base > bmax) { base = Math.max(bmin, Math.min(bmax, base)); if (!forReport && t.dy) t.dy[it.chan] = base - lay.base(it.slot); }
       const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
       lay.ys[i] = base; lay.tagY[i] = tagY;
