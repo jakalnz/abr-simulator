@@ -31,6 +31,7 @@
   <span id="waveBtns" class="tgrp lblgrp" title="Wave labels: arm a wave (keys 1-5), then click the selected curve. Click the armed wave again (or Esc) to disarm."></span>
   <span id="catBtns" class="tgrp lblgrp" title="Response category for the selected curve (keys 6-8)"></span>
   <span class="tgrp" title="Display"><button id="tbAB" class="tog" title="Show A/B splits (off by default)">A/B</button><button id="tbC" class="tog" title="Show contralateral traces">C</button></span>
+  <span class="tgrp" title="Arrange curves"><button class="ord" data-ord="O" title="Order by testing order">O</button><button class="ord" data-ord="F" title="Order by frequency (click, then 0.5-4 kHz)">F</button><button class="ord" data-ord="I" title="Order by intensity (highest first)">I</button></span>
   <span class="sp"></span>
   <span id="pageBtns" class="tgrp" title="Recording pages"></span>
   <span id="sessionTxt">Current session</span>
@@ -49,7 +50,8 @@
         <div class="row"><span>Stim.</span>
           <span class="radios"><label><input type="radio" name="ear" value="0" checked> Right</label> <label><input type="radio" name="ear" value="1"> Left</label></span></div>
         <div class="row"><span>Transducer</span><select id="trans"><option value="insert">Insert phone</option><option value="bone">Bone conductor</option></select></div>
-        <div class="row"><span>Contra masking</span><span><input type="checkbox" id="maskChk" title="Broadband noise to the non-test ear"> <select id="maskLvl"></select> dB SPL</span></div>        <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
+        <div class="row"><span>Contra masking</span><span><input type="checkbox" id="maskChk" title="Broadband noise to the non-test ear"> <select id="maskLvl"></select> dB SPL</span></div>
+        <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
         <div class="row"><span>Rate (/s)</span><select id="rate"></select></div>
         <div class="row"><span>Averages</span><select id="nmax"></select></div>
         <div class="row"><span>Reject (&plusmn;&micro;V)</span><select id="reject"><option>10</option><option>20</option><option selected>40</option><option>80</option></select></div>
