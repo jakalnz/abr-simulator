@@ -80,7 +80,8 @@ table.lat th, #reportBody th { background: #eee; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
 .grid2 label { display: flex; flex-direction: column; gap: 2px; }
 .mbox input[type=number], .mbox input:not([type]) { padding: 2px 4px; }
-#pAud { border-collapse: collapse; } #pAud th, #pAud td { padding: 2px 5px; border: 1px solid #ccc; text-align: center; }
+#pAudBox, #pAns { margin-top: 10px; } #pAudBox summary, #pAns summary { font-weight: 600; cursor: pointer; }
+#pAud { border-collapse: collapse; margin-top: 4px; } #pAud th, #pAud td { padding: 2px 5px; border: 1px solid #ccc; text-align: center; }
 #pAud input { width: 54px; text-align: center; }
 #pPath .earblk { border: 1px solid #ccc; background: #fff; padding: 6px; margin: 6px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; }
 #pPath .earblk h4 { grid-column: 1/-1; margin: 0; }

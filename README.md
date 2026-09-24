@@ -34,8 +34,9 @@ http://localhost:8232. It can be hosted on GitHub Pages as-is.
 ## Sharing a case
 Instructors: **Patient / case…** → enter the instructor password → edit the case → **Copy share link**.
 The whole patient is encoded in the link (`…index.html#case=…`, well under 255 characters), so nothing is stored on
-a server. Students opening the link get the case read-only (their view shows the audiogram but not the pathology,
-CM or latency answers).
+a server. Students opening the link get the case read-only: the hearing thresholds and the pathology, CM and
+latency answers stay folded away until the instructor password is entered. Students can still pick one of the
+built-in preset cases and Apply it without the password.
 
 The instructor password is set in `app.js` (`ADMIN_PW`, default `1234`). It is client-side only and is a classroom
 convenience, not security.

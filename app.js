@@ -663,8 +663,8 @@
       <label>Wave V (ms)<input type="number" step="0.05" data-p="latV" data-e="${e}" placeholder="auto"></label></div>`).join('') +
       '<div class="hint">Latencies apply at 80 dB nHL, 17.1/s, rarefaction, insert phones. Leave blank for the model default (adjusted for age, pathology, thresholds). Click morphology varies waves II-V (IV/V complex); PAM adds a post-auricular muscle wave at ~10-12 ms (adults, insert phones).</div>';
   }
-  function fillPatientModal() {
-    const p = S.patient;
+  function fillPatientModal(p) {
+    p = p || S.patient;
     $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.3 : p.noise);
     $('pMonths').disabled = p.adult;
     document.querySelectorAll('#pAud input').forEach((inp) => (inp.value = p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i]));
@@ -696,9 +696,10 @@
   function applyLock() {
     const un = !!S.unlocked;
     $('mPatient').classList.toggle('locked', !un);
-    document.querySelectorAll('#mPatient input, #mPatient select').forEach((el) => { if (el.id !== 'pPw') el.disabled = !un; });
+    // students may pick a preset case (no password) but not edit or see thresholds / answers
+    document.querySelectorAll('#mPatient input, #mPatient select').forEach((el) => { if (el.id !== 'pPw' && el.id !== 'pPreset') el.disabled = !un; });
     if (un) $('pMonths').disabled = $('pAge').value === 'adult';
-    $('pHint').textContent = un ? 'Instructor mode: edit the case, then Apply. Copy share link distributes the case to students.' : 'Case information (read-only). Instructor password required to edit the case or create links.';
+    $('pHint').textContent = un ? 'Instructor mode: edit the case, then Apply. Copy share link distributes the case to students.' : 'Choose a preset case and Apply, or ask your instructor. The password is needed to see or edit thresholds and answers, or to create links.';
   }
   function tryUnlock() {
     if ($('pPw').value === ADMIN_PW) {
@@ -713,11 +714,15 @@
     buildPatientModal();
     $('pUnlock').onclick = tryUnlock; $('pRelock').onclick = lockAgain;
     $('pPw').onkeydown = (e) => { if (e.key === 'Enter') tryUnlock(); };
-    $('btnPatient').onclick = () => { fillPatientModal(); applyLock(); $('mPatient').hidden = false; };
+    $('btnPatient').onclick = () => { $('pPreset').value = ''; fillPatientModal(); applyLock(); $('mPatient').hidden = false; };
     $('pClose').onclick = () => ($('mPatient').hidden = true);
     $('pAge').onchange = () => ($('pMonths').disabled = $('pAge').value === 'adult');
-    $('pPreset').onchange = () => { const i = $('pPreset').value; if (i !== '') { S.patient = M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[+i]))); fillPatientModal(); } };
-    $('pApply').onclick = () => { if (!S.unlocked) return; setPatient(readPatientModal()); $('mPatient').hidden = true; toast('Patient applied; recordings cleared'); };
+    // a preset only fills the dialog; Apply makes it the current patient (and clears recordings)
+    $('pPreset').onchange = () => { const i = $('pPreset').value; fillPatientModal(i === '' ? S.patient : M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[+i])))); };
+    $('pApply').onclick = () => {
+      if (!S.unlocked && $('pPreset').value === '') { toast('Choose a preset case first'); return; }
+      setPatient(readPatientModal()); $('mPatient').hidden = true; toast('Patient applied; recordings cleared');
+    };
     $('pCopy').onclick = () => { if (S.unlocked) copyLink(readPatientModal()); };
     $('btnShare').onclick = () => { if (S.unlocked) copyLink(S.patient); else { fillPatientModal(); applyLock(); $('mPatient').hidden = false; toast('Instructor password required to create share links'); } };
   }
