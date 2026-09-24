@@ -70,6 +70,19 @@ Literature anchors (do not change casually — each constant is fitted to a sour
   5.2 entry criterion); Moderate CM 597 nV, RC V 7.75 ms / ~91 nV (Definite), confidence ~90% at 90 dB, ~25% at 80, 2 kHz NR.
   Severe gives only a trace at 100 dB; Marked none. Alternating A/B repro is ~0 with a large CM (A = RC, B = CC), so use
   confidence/Fmp for ANSD. Re-run this check if `ANSD` changes.
+- Contralateral masking (`stim.mask`, dB SPL BBN via insert to the non-test ear, max 85): raises that cochlea's threshold
+  to `em = mask - MASK_K - gap` (gap = masked ear's AC-BC gap); the test cochlea gets `mask - INTERAURAL_ATT_INSERT - K`
+  (over-masking). `MASK_K` is fitted so the BCEHP 2022 tables mask the cross-over with ~10 dB to spare: AC from the 4.11
+  table (Stapells 1984, 30 dB IA assumed), BC from the 4.10 infant table (Lau & Small 2020, >= 10 dB IA). The two tables
+  imply very different effective levels; each transducer follows its own. The UI defaults to 65 dB SPL and deliberately
+  does not show a recommended level (students choose it). CM is not masked.
+- Electrodes (`opts.imp` = {Cz, M1, M2, Gnd} kOhm; M2 = right mastoid): impedance does not change the ABR (BCEHP 2022
+  3.5). Per channel (Cz - mastoid of that ear): EEG sd x(1 + 0.1 per kOhm difference) (CMRR, so noisy cases suffer
+  more), plus 50 Hz (+150 Hz) mains hum `IMP_HUM` per kOhm difference (+0.15 x ground above 3 kOhm), passed through the
+  filter gain (`humGain`: HPF 30 Hz lets far more through than 100 Hz); hum near the reject limit adds rejections from
+  ~6 kOhm; high mean impedance enlarges movement bursts. Calibration (quiet infant, 30% noise, 2000 sweeps, click):
+  ideal ~16 nV (vs 15 without), difference 2 kOhm ~19, 5 kOhm ~26, 10 kOhm ~40 nV + 20% rejects; 2 kHz tone bursts ~2x
+  worse. Start state is a case setting (`patient.electrodes`: 0 as found, 1 difficult skin, 2 not attached).
 - Click morphology (`MORPH`, per ear `morph` 0-4) scales/shifts waves II-V; `calibrate()` runs on Standard (0).
   PAM (`ear.pam`) is a myogenic 9-12 ms hump (adult, AC). `normalLI()` gives model-derived normal L-I bands
   (+/- 2 SD, V SD from Gorga 1989 Table 2).
@@ -87,12 +100,13 @@ per-sample code must use `arr.length`, not a global `NW`. Reproducibility / Fmp 
 window around the modelled wave V for tone bursts (Fmp is evaluated near wave V).
 
 ## Patients and share links
-`patient = {name, adult, ageMonths, noisy, noise, ears:[{ac[4], bc[4], path 0|1|2, sev 0-3, cm 0-3, ring 0|1, morph 0-4, pam 0-2, latI, latIII, latV}]}`
+`patient = {name, adult, ageMonths, noisy, noise, electrodes, ears:[{ac[4], bc[4], path 0|1|2, sev 0-3, cm 0-3, ring 0|1, morph 0-4, pam 0-2, latI, latIII, latV}]}`
 (thresholds dB HL at 0.5/1/2/4 kHz; `path` 1 = retrocochlear, 2 = neuropathy/ANSD; latencies are optional manual
 overrides at 80 dB nHL, 17.1/s; `noise` = EEG-noise multiplier, default 0.3, one of `NOISE_LEVELS` in `codec.js`, edited in the
 Patient / case dialog (instructor only) and carried in the share link). The codec packs this into ~65–90 chars (Word
 hyperlinks break above 255). Bump `VERSION` in `codec.js` if the packed layout changes and keep decoding old versions
-(v1 links, which have no noise field, still decode and get 30%; v3 adds ring/morph/pam, older links get 0).
+(v1 links, which have no noise field, still decode and get 30%; v3 adds ring/morph/pam, older links get 0; v4 adds the
+electrode start state, older links get 0 = on as found).
 
 The instructor gate (password `1234`, `ADMIN_PW` in `app.js`) hides case answers and editing from students. It is
 client-side only — anyone can read the source — so treat it as a classroom convenience, not security.

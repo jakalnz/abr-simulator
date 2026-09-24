@@ -15,6 +15,7 @@
     patient: M.newPatient(JSON.parse(JSON.stringify(window.DEFAULT_PATIENTS[0]))),
     ear: 0, level: 80, type: 0, trans: 'insert', pol: 'rare', rate: 17.1, nmax: 2000,
     reject: 40, hp: 100, lp: 3000, speed: 100, noise: 0.3, clamped: false,      // noise comes from the patient (case setting)
+    maskOn: false, maskLevel: 65, elec: null,                                  // contralateral masking (dB SPL); electrode sites
     chan: 'ipsi', showAB: false, order: 'I', zoom: 1,
     pages: Array.from({ length: 9 }, () => ({ traces: [], sel: null })), page: 0,
     traces: [], sel: null, acq: null, live: null, timer: null, last: 0, paused: false,
@@ -40,7 +41,7 @@
   const pad2 = (n) => String(n).padStart(2, '0');
   const stamp = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   function logEv(msg) { S.log.push({ t: new Date(), page: S.page + 1, msg }); }
-  const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s`;
+  const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s${s.mask ? `, contra masking ${s.mask} dB SPL` : ''}`;
   // 'add': merged / added curves of different polarities (no single polarity to show)
   const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C', add: 'Sum' };
   const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C', add: '+' };
@@ -66,8 +67,9 @@
     document.querySelectorAll('input[name=ear]').forEach((r) => (r.checked = +r.value === S.ear));
     $('chanSel').value = S.chan; $('showAB').checked = S.showAB;
     if (S.trans === 'bone') S.clamped = false;
-    $('tbClamp').classList.toggle('on', S.clamped); $('tbClamp').disabled = S.trans === 'bone'; $('clampChk').checked = S.clamped; $('clampChk').disabled = S.trans === 'bone';
+    $('tbClamp').classList.toggle('on', S.clamped); $('tbClamp').disabled = S.trans === 'bone';
     $('tbAB').classList.toggle('on', S.showAB); $('tbC').classList.toggle('on', S.chan === 'both');
+    $('maskChk').checked = S.maskOn; $('maskLvl').value = S.maskLevel;
     document.querySelectorAll('.ord').forEach((b) => b.classList.toggle('on', b.dataset.ord === S.order));
     const m = maxLevel();
     const g = $('lvlGrid'); g.innerHTML = '';
@@ -84,28 +86,30 @@
   function readUI() {
     S.type = +$('stType').value; S.level = +$('level').value || 0; S.trans = $('trans').value; S.pol = $('pol').value;
     S.rate = +$('rate').value; S.nmax = +$('nmax').value; S.reject = +$('reject').value;
-    S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value;
+    S.hp = +$('hpf').value; S.lp = +$('lpf').value; S.speed = +$('speed').value; S.maskLevel = +$('maskLvl').value;
     S.ear = +document.querySelector('input[name=ear]:checked').value;
     clampLevel();
   }
 
   /* ---------- acquisition ---------- */
   function currentStim() {
-    return { ear: S.ear, level: S.level, freq: S.type, polarity: S.pol, rate: S.rate, transducer: S.trans, clamped: S.clamped && S.trans === 'insert' };
+    return { ear: S.ear, level: S.level, freq: S.type, polarity: S.pol, rate: S.rate, transducer: S.trans, clamped: S.clamped && S.trans === 'insert', mask: S.maskOn ? S.maskLevel : 0 };
   }
   function labelFor(stim) {
-    const base = (stim.freq ? (stim.freq / 1000) + 'k ' : '') + stim.level + ' ' + EAR[stim.ear] + (stim.clamped ? ' cl' : '');
+    const base = (stim.freq ? (stim.freq / 1000) + 'k ' : '') + stim.level + ' ' + EAR[stim.ear] + (stim.clamped ? ' cl' : '') + (stim.mask ? ' m' : '');
     const n = S.traces.filter((t) => t.base === base && t.ear === stim.ear).length;
     return { base, label: n ? base + n : base };
   }
   function start() {
     if (S.acq) return;
     readUI();
+    const imp = impNow();
+    if (!imp) { toast('Electrodes not connected: open Electrodes\u2026 and place all four'); openElec(); return; }
     const stim = currentStim();
-    S.acq = new M.Acquisition(S.patient, stim, { nMax: S.nmax, reject: S.reject, hp: S.hp, lp: S.lp, noise: S.noise });
+    S.acq = new M.Acquisition(S.patient, stim, { nMax: S.nmax, reject: S.reject, hp: S.hp, lp: S.lp, noise: S.noise, imp });
     const { base, label } = labelFor(stim);
-    S.live = { id: S.nextId++, base, label, ear: stim.ear, stim, dy: [0, 0], opts: { hp: S.hp, lp: S.lp }, live: true, marks: {}, hidden: false, ...blank(stim) };
-    logEv(`Start ${label}: ${stimText(stim)}, HPF/LPF ${S.hp}/${S.lp} Hz, ${S.nmax} sweeps, reject \u00b1${S.reject} \u00b5V`);
+    S.live = { id: S.nextId++, base, label, ear: stim.ear, stim, dy: [0, 0], opts: { hp: S.hp, lp: S.lp }, imp, live: true, marks: {}, hidden: false, ...blank(stim) };
+    logEv(`Start ${label}: ${stimText(stim)}, HPF/LPF ${S.hp}/${S.lp} Hz, ${S.nmax} sweeps, reject \u00b1${S.reject} \u00b5V; impedances ${impText(imp)}`);
     S.paused = false; S.last = performance.now();
     S.timer = setInterval(tick, 60);
     setButtons(); render();
@@ -153,6 +157,75 @@
     $('btnPause').textContent = S.paused ? 'Resume' : 'Pause'; $('btnPause').disabled = !S.acq;
   }
 
+  /* ---------- contralateral masking (broadband noise to the non-test ear, dB SPL; default 65, max 85) ---------- */
+  function setMask(on) {
+    readUI(); S.maskOn = on; syncUI();
+    logEv(on ? `Contralateral masking on, ${S.maskLevel} dB SPL` : 'Contralateral masking off');
+  }
+
+  /* ---------- electrodes: sites, skin prep, impedances (kOhm) ----------
+   * Fixed sites: Cz (vertex / high forehead, non-inverting), M2 / M1 (right / left mastoid, inverting), ground (low forehead).
+   * skin = site impedance an electrode gets when placed (lowered by prepping the skin, down to a floor); z = measured value. */
+  const ELEC = [['Cz', 'Vertex / high forehead (+)'], ['M2', 'Right mastoid (−)'], ['M1', 'Left mastoid (−)'], ['Gnd', 'Ground (low forehead)']];
+  const rnd = (a, b) => a + (b - a) * Math.random();
+  function initElectrodes(mode) {             // mode: 0 on as found, 1 on with difficult skin, 2 not attached
+    S.elec = {};
+    const bad = ELEC[Math.floor(Math.random() * 3)][0];     // as found: usually one site (not the ground) needs work
+    for (const [k] of ELEC) {
+      const skin = mode === 1 ? rnd(7, 20) : mode === 2 ? rnd(5, 15) : k === bad ? rnd(5.5, 11) : rnd(1.8, 4.5);
+      S.elec[k] = { skin, floor: mode === 1 ? rnd(1.6, 2.8) : rnd(0.8, 1.8), preps: 0, on: mode !== 2, z: 0 };
+      if (mode !== 2) S.elec[k].z = contact(S.elec[k], true);
+    }
+  }
+  function contact(el, noPoor) {             // electrode placed: skin impedance +/- contact variation, sometimes poor contact
+    return Math.round(el.skin * rnd(0.85, 1.2) * (!noPoor && Math.random() < 0.1 ? 2.5 : 1) * 10) / 10;
+  }
+  function impNow() {                        // {Cz, M1, M2, Gnd} or null if any electrode is off
+    if (!S.elec || ELEC.some(([k]) => !S.elec[k].on)) return null;
+    return { Cz: S.elec.Cz.z, M1: S.elec.M1.z, M2: S.elec.M2.z, Gnd: S.elec.Gnd.z };
+  }
+  const impText = (z) => `Cz ${z.Cz.toFixed(1)}, R mastoid ${z.M2.toFixed(1)}, L mastoid ${z.M1.toFixed(1)}, ground ${z.Gnd.toFixed(1)} kΩ`;
+  const zCls = (z) => (z == null ? 'zoff' : z < 3 ? 'zok' : z <= 5 ? 'zwarn' : 'zbad');
+  const dCls = (d) => (d == null ? 'zoff' : d <= 1 ? 'zok' : d <= 2 ? 'zwarn' : 'zbad');
+  function elecAction(k, act) {
+    if (S.acq) { toast('Stop the recording before changing electrodes'); return; }
+    const el = S.elec[k], name = ELEC.find((e) => e[0] === k)[1];
+    if (act === 'remove') { el.on = false; logEv(`Electrode removed: ${name}`); }
+    else if (act === 'prep') {
+      if (el.preps >= 3) { toast('Skin already well prepped: avoid excessive abrasion (BCEHP 2022 3.4)'); return; }
+      el.preps++; el.skin = Math.max(el.floor, el.skin * rnd(0.4, 0.6));
+      logEv(`Skin prepped: ${name}`);
+    } else if (act === 'place') { el.on = true; el.z = contact(el); logEv(`Electrode placed: ${name}, ${el.z.toFixed(1)} kΩ`); }
+    renderElec(); render();
+  }
+  function renderElec() {
+    const z = (k) => (S.elec[k].on ? S.elec[k].z : null), fz = (v) => (v == null ? 'off' : v.toFixed(1));
+    const d = (k) => (z('Cz') == null || z(k) == null ? null : Math.abs(z('Cz') - z(k)));
+    // badge in the status strip
+    const all = ELEC.map(([k]) => z(k)), off = all.some((v) => v == null);
+    const good = !off && all.every((v) => v < 3) && d('M1') <= 1 && d('M2') <= 1;
+    $('zBadge').textContent = off ? 'Z off' : good ? 'Z ok' : 'Z check';
+    $('zBadge').className = off ? 'bad' : good ? 'ok' : 'warn';
+    if ($('elecFloat').hidden) return;
+    // top view of the head, nose up; patient's right on the right of the drawing
+    const pos = { Cz: [110, 62], Gnd: [110, 22], M2: [178, 74], M1: [42, 74] };
+    const col = { zok: '#2e8b3a', zwarn: '#d08a00', zbad: '#c0392b', zoff: '#999' };
+    const svg = `<svg width="220" height="130" viewBox="0 0 220 130"><ellipse cx="110" cy="68" rx="62" ry="56" fill="#f7efe6" stroke="#777"/>` +
+      `<path d="M100 13 L110 2 L120 13" fill="#f7efe6" stroke="#777"/><ellipse cx="46" cy="70" rx="6" ry="14" fill="#f7efe6" stroke="#777"/><ellipse cx="174" cy="70" rx="6" ry="14" fill="#f7efe6" stroke="#777"/>` +
+      `<text x="8" y="126" font-size="10" fill="#666">L</text><text x="206" y="126" font-size="10" fill="#666">R</text>` +
+      ELEC.map(([k]) => { const [x, y] = pos[k]; return `<circle cx="${x}" cy="${y}" r="7" fill="${col[zCls(z(k))]}" stroke="#333"/><text x="${x}" y="${y + (k === 'Gnd' ? -10 : 19)}" font-size="10" text-anchor="middle">${k === 'Gnd' ? 'Gnd' : k} ${fz(z(k))}</text>`; }).join('') + '</svg>';
+    const rows = ELEC.map(([k, name]) => {
+      const el = S.elec[k];
+      const btns = el.on ? `<button data-k="${k}" data-a="remove">Remove</button>`
+        : `<button data-k="${k}" data-a="prep" title="Lightly abrade and clean the skin">Prep skin</button><button data-k="${k}" data-a="place">Place</button>`;
+      return `<tr><td>${name}${el.preps ? ` <span class="hint">(prepped ${el.preps}×)</span>` : ''}</td><td class="z ${zCls(z(k))}">${fz(z(k))}</td><td class="b">${btns}</td></tr>`;
+    }).join('');
+    const pair = (lbl, k) => `<div>${lbl}: <b class="${dCls(d(k))}">${d(k) == null ? '--' : 'Δ ' + d(k).toFixed(1)}</b></div>`;
+    $('elBody').innerHTML = svg + `<table>${rows}</table><div class="pairs">${pair('Right channel (Cz−M2)', 'M2')}${pair('Left channel (Cz−M1)', 'M1')}</div>` +
+      '<div class="hint" style="margin-top:6px">To lower an impedance: Remove the electrode, Prep skin, then Place it again. High or unequal impedances let in more EEG noise and mains hum (BCEHP 2022 3.5).</div>';
+  }
+  function openElec() { $('elecFloat').hidden = false; renderElec(); }
+
   /* ---------- rendering ---------- */
   // curve arrangement: O = testing order, F = frequency (click first, then 0.5-4 kHz), I = intensity (highest first)
   const ORDERS = {
@@ -170,7 +243,7 @@
     // polarity) are overlaid on one baseline, as Eclipse overlays replicates.
     const groups = [], byKey = new Map();
     for (const t of list) {
-      const key = S.order === 'O' ? t.id : [t.stim.freq, t.stim.level, t.stim.transducer, t.stim.rate, t.stim.polarity, !!t.stim.clamped].join('|');
+      const key = S.order === 'O' ? t.id : [t.stim.freq, t.stim.level, t.stim.transducer, t.stim.rate, t.stim.polarity, !!t.stim.clamped, t.stim.mask || 0].join('|');
       let g = byKey.get(key); if (!g) { g = []; byKey.set(key, g); groups.push(g); }
       g.push(t);
     }
@@ -186,7 +259,7 @@
   }
   const L_MARGIN = 92, R_MARGIN = 14, T_MARGIN = 26, B_MARGIN = 34;
   function layout(cv, ear, forReport) {
-    const W = cv.clientWidth, H = cv.clientHeight;
+    const W = cv._w || cv.clientWidth, H = cv._h || cv.clientHeight;     // _w/_h: off-screen snapshot canvas
     const items = paneItems(ear, forReport);
     const plotH = H - T_MARGIN - B_MARGIN;
     const w1 = items.reduce((m, it) => Math.max(m, it.tr.w1 || W1), W1);
@@ -198,7 +271,8 @@
   }
   function draw(cv, ear, forReport) {
     const dpr = forReport ? 2 : window.devicePixelRatio || 1;     // report canvases at 2x so the printout stays sharp
-    const w = cv.clientWidth, h = cv.clientHeight;
+    const w = cv._w || cv.clientWidth, h = cv._h || cv.clientHeight;
+    const keepPos = forReport === 'snap';                           // report snapshot: the curves where the user put them
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -222,7 +296,7 @@
       const it = items[i];
       const t = it.tr, d = t.ch[it.chan];
       // manual offsets (report ignores them) are limited so the baseline and its tag stay inside the plot and can be grabbed again
-      let base = lay.base(it.slot) + (forReport ? 0 : (t.dy && t.dy[it.chan]) || 0);
+      let base = lay.base(it.slot) + (forReport && !keepPos ? 0 : (t.dy && t.dy[it.chan]) || 0);
       const bmin = T_MARGIN + 10, bmax = h - B_MARGIN - 10;
       if (base < bmin || base > bmax) { base = Math.max(bmin, Math.min(bmax, base)); if (!forReport && t.dy) t.dy[it.chan] = base - lay.base(it.slot); }
       const tagY = base + (it.gi - (it.n - 1) / 2) * 15, ecol = t.col || PALETTE[it.gi % PALETTE.length] || col;   // overlaid replicates get their own colour and tag
@@ -295,10 +369,16 @@
     for (let x = 20; x < c.width; x += 20) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, c.height); }
     [12, 32].forEach((y) => { g.moveTo(0, y + 0.5); g.lineTo(c.width, y + 0.5); });
     g.stroke();
-    const amp = (S.patient.noisy ? 11 : 3) * (S.acq ? 1 : 0.6);
+    const amp = (S.patient.noisy ? 11 : 3) * (S.acq ? 1 : 0.6), imp = impNow(), ph = performance.now() / 7;
     ['#8b1414', '#1a1a9c'].forEach((col, k) => {
+      // electrodes: unequal impedances pass more EEG (CMRR) and mains hum; an electrode off gives a railing, humming trace
+      const ie = imp ? M.impEffects(imp, k) : { cmrr: 3, hum: 12 };
       g.strokeStyle = col; g.beginPath(); let y = 0;
-      for (let i = 0; i < c.width; i += 2) { y = 0.8 * y + 0.6 * (Math.random() - 0.5) * 2; const py = 12 + k * 20 + y * amp * 0.9; i ? g.lineTo(i, py) : g.moveTo(i, py); }
+      for (let i = 0; i < c.width; i += 2) {
+        y = 0.8 * y + 0.6 * (Math.random() - 0.5) * 2;
+        const v = y * amp * 0.9 * ie.cmrr + ie.hum * 1.6 * Math.sin(i / 3 + ph);
+        const py = 12 + k * 20 + Math.max(-11, Math.min(11, v)); i ? g.lineTo(i, py) : g.moveTo(i, py);
+      }
       g.stroke();
     });
     g.fillStyle = '#555'; g.font = '9px Segoe UI'; g.fillText('R', 2, 10); g.fillText('L', 2, 30); g.fillText('±40µV', 180, 40);
@@ -618,9 +698,12 @@
     const rn = !(a.rn > 0 && b.rn > 0) ? 0 : sub ? 0.5 * Math.hypot(a.rn, b.rn) : 1 / Math.sqrt(1 / (a.rn * a.rn) + 1 / (b.rn * b.rn));
     S.mergeCount = (S.mergeCount || 0) + 1;
     logEv(`${{ merge: 'Merged', add: 'Added', sub: 'Subtracted' }[mode]} ${a.label} ${mode === 'sub' ? '−' : '+'} ${b.label}`);
+    let stim = sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim.polarity !== b.stim.polarity ? Object.assign({}, a.stim, { polarity: 'add' }) : a.stim;
+    let base = a.base;
+    if ((a.stim.mask || 0) !== (b.stim.mask || 0)) { stim = Object.assign({}, stim, { mask: 0 }); base = base.replace(/ m$/, ''); }   // masked + unmasked: no mask claim
     const t = {
-      id: S.nextId++, base: a.base, ear: a.ear, stim: sub ? Object.assign({}, a.stim, { polarity: 'sub' }) : a.stim.polarity !== b.stim.polarity ? Object.assign({}, a.stim, { polarity: 'add' }) : a.stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
-      label: a.base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
+      id: S.nextId++, base, ear: a.ear, stim, w1: a.w1, opts: a.opts, dy: [0, 0], marks: {}, hidden: false, live: false,
+      label: base + ({ merge: ' M', add: ' +', sub: ' −' })[mode] + S.mergeCount, mode,
       ch, n: nt, rejected: (a.rejected * na + b.rejected * nb) / nt, rn, ...curveStats(ch, rn)
     };
     if (a.repro == null || b.repro == null) t.repro = null;   // split halves have no A/B of their own
@@ -711,13 +794,13 @@
   }
   function fillPatientModal(p) {
     p = p || S.patient;
-    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.3 : p.noise);
+    $('pName').value = p.name; $('pAge').value = p.adult ? 'adult' : 'child'; $('pMonths').value = p.ageMonths; $('pState').value = p.noisy ? 'noisy' : 'quiet'; $('pNoise').value = String(p.noise == null ? 0.3 : p.noise); $('pElec').value = String(p.electrodes || 0);
     $('pMonths').disabled = p.adult;
     document.querySelectorAll('#pAud input').forEach((inp) => (inp.value = p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i]));
     document.querySelectorAll('#pPath [data-p]').forEach((el) => { const v = p.ears[+el.dataset.e][el.dataset.p]; el.value = v == null ? '' : v; });
   }
   function readPatientModal() {
-    const p = M.newPatient({ name: $('pName').value.trim() || 'Patient', adult: $('pAge').value === 'adult', ageMonths: Math.max(0, Math.min(63, +$('pMonths').value || 0)), noisy: $('pState').value === 'noisy', noise: parseFloat($('pNoise').value) });
+    const p = M.newPatient({ name: $('pName').value.trim() || 'Patient', adult: $('pAge').value === 'adult', ageMonths: Math.max(0, Math.min(63, +$('pMonths').value || 0)), noisy: $('pState').value === 'noisy', noise: parseFloat($('pNoise').value), electrodes: +$('pElec').value });
     document.querySelectorAll('#pAud input').forEach((inp) => { p.ears[+inp.dataset.e][inp.dataset.k][+inp.dataset.i] = Math.round((+inp.value || 0) / 5) * 5; });
     document.querySelectorAll('#pPath [data-p]').forEach((el) => {
       const k = el.dataset.p, e = p.ears[+el.dataset.e];
@@ -735,6 +818,7 @@
   function setPatient(p) {
     if (S.acq) stop();
     S.patient = M.newPatient(JSON.parse(JSON.stringify(p))); S.noise = S.patient.noise;
+    initElectrodes(S.patient.electrodes); renderElec();
     logEv(`Patient set: ${S.patient.name} (recordings cleared)`);
     S.pages.forEach((p) => { p.traces = []; p.sel = null; }); S.traces = S.pages[S.page].traces; S.sel = null; S.live = null;
     syncUI(); renderList(); render();
@@ -783,15 +867,21 @@
   }
   function openReport() {
     const rows = S.traces.filter((t) => !t.hidden), p = S.patient;
-    // graph height grows with the number of curve slots so every curve is printed
-    const slots = Math.max(paneItems(0, 'x').nSlots || 1, paneItems(1, 'x').nSlots || 1);
-    const gh = Math.min(1000, Math.max(380, slots * 55 + 60));
+    // the waveforms are printed as a snapshot of the screen: each ear pane at its full on-screen size, with the curves where
+    // they are displayed (positions, scale, contra channel), drawn off-screen at 2x and embedded as an image so printing
+    // cannot resize or clear them
+    const snap = (e) => {
+      const src = $('cv' + e), c = document.createElement('canvas');
+      c._w = src.clientWidth || 600; c._h = src.clientHeight || 600;
+      draw(c, e, 'snap');
+      return c.toDataURL('image/png');
+    };
     let h = `<div class="rep-head"><div><h2>ABR report &mdash; page ${S.page + 1}</h2><div>${p.name} &mdash; ${p.adult ? 'Adult' : 'Child ' + p.ageMonths + ' mo'}</div></div><div>${new Date().toLocaleDateString()}</div></div>
-      <div class="rep-graphs"><div><div class="ptitle r">Right ear</div><canvas id="rc0" style="height:${gh}px"></canvas></div><div><div class="ptitle l">Left ear</div><canvas id="rc1" style="height:${gh}px"></canvas></div></div>
+      <div class="rep-graphs"><div><div class="ptitle r">Right ear</div><img alt="Right ear waveforms" src="${snap(0)}"></div><div><div class="ptitle l">Left ear</div><img alt="Left ear waveforms" src="${snap(1)}"></div></div>
       <div class="rep-sec"><h3>Recordings</h3>
       <table><tr><th>Curve</th><th>Stimulus</th><th>Transducer</th><th>Rate (/s)</th><th>Polarity</th><th>HPF / LPF (Hz)</th><th>Recorded</th><th>Rejected</th><th>Wave repro</th><th>Fmp</th><th>Response confidence</th><th>Residual noise</th></tr>`;
     for (const t of rows) {
-      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}${t.stim.clamped ? ' (clamped)' : ''}</td>` +
+      h += `<tr><td><b>${t.label}</b></td><td>${typeLabel(t.stim.freq)} ${t.stim.level} dB nHL${t.stim.mask ? `, masked ${t.stim.mask} dB SPL` : ''}</td><td>${t.stim.transducer === 'bone' ? 'Bone' : 'Insert'}${t.stim.clamped ? ' (clamped)' : ''}</td>` +
         `<td>${t.stim.rate}</td><td>${POL_NAME[t.stim.polarity]}</td><td>${t.opts ? t.opts.hp : S.hp} / ${t.opts ? t.opts.lp : S.lp}</td>` +
         `<td>${t.n}</td><td>${Math.round(t.rejected * 100)}%</td><td>${t.repro == null ? '--' : Math.round(t.repro * 100) + '%'}</td><td>${t.fmp ? t.fmp.toFixed(1) : '--'}</td><td>${t.n ? t.conf.toFixed(1) + '%' : '--'}</td><td>${t.rn ? t.rn.toFixed(0) + ' nV' : '--'}</td></tr>`;
     }
@@ -801,7 +891,14 @@
       <div class="rep-sec"><h3>Test log</h3>${logHTML()}</div>`;
     $('reportBody').innerHTML = h;
     $('mReport').hidden = false;
-    requestAnimationFrame(() => { draw($('rc0'), 0, 'x'); draw($('rc1'), 1, 'x'); li.gs.forEach((g, i) => drawLI($('rli' + i), g, 2)); });
+    requestAnimationFrame(() => {
+      li.gs.forEach((g, i) => drawLI($('rli' + i), g, 2));
+      // freeze the charts as images too, so a print re-layout cannot blank them
+      $('reportBody').querySelectorAll('canvas').forEach((cv) => {
+        const img = document.createElement('img'); img.src = cv.toDataURL('image/png'); img.className = 'chart'; img.alt = 'Latency-intensity chart';
+        cv.replaceWith(img);
+      });
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -852,7 +949,20 @@
       if (on) toast('Insert tube clamped: no sound reaches the ear, only stimulus artefact is recorded');
     };
     $('tbClamp').onclick = () => setClamp(!S.clamped);
-    $('clampChk').onchange = () => setClamp($('clampChk').checked);
+    fill($('maskLvl'), [40, 45, 50, 55, 60, 65, 70, 75, 80, 85], S.maskLevel);        // 85 dB SPL = BCEHP safety maximum
+    $('maskChk').onchange = () => setMask($('maskChk').checked);
+    $('maskLvl').onchange = () => { readUI(); syncUI(); if (S.maskOn) logEv(`Masking level ${S.maskLevel} dB SPL`); };
+    $('btnElec').onclick = () => ($('elecFloat').hidden ? openElec() : ($('elecFloat').hidden = true));
+    $('zBadge').onclick = openElec;
+    $('elClose').onclick = () => ($('elecFloat').hidden = true);
+    $('elBody').onclick = (e) => { const b = e.target.closest('button[data-a]'); if (b) elecAction(b.dataset.k, b.dataset.a); };
+    $('elHead').onmousedown = (e) => {             // drag the float by its header
+      if (e.target.closest('button')) return;
+      const f = $('elecFloat'), r = f.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      const mv = (ev) => { f.style.left = Math.max(0, ev.clientX - dx) + 'px'; f.style.top = Math.max(0, ev.clientY - dy) + 'px'; f.style.right = 'auto'; };
+      const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+      window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up); e.preventDefault();
+    };
     document.querySelectorAll('.ord').forEach((b) => (b.onclick = () => {
       S.order = b.dataset.ord; S.traces.forEach((t) => (t.dy = [0, 0]));   // re-arranging clears manual positions
       syncUI(); render();
@@ -888,6 +998,7 @@
     const m = /case=([^&]+)/.exec(location.hash);
     if (m) { try { S.patient = M.newPatient(window.ABRCodec.decode(m[1])); S.noise = S.patient.noise; } catch (err) { toast('Could not read shared case: ' + err.message); } }
     logEv(`Session started: patient ${S.patient.name}${m ? ' (shared case link)' : ''}`);
+    initElectrodes(S.patient.electrodes); renderElec();
     syncUI(); setButtons(); renderList(); render();
     setInterval(drawEEG, 120);
     window.ABRApp = S;   // exposed for debugging

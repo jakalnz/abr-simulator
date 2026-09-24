@@ -25,8 +25,6 @@
   <span id="waveBtns" class="tgrp lblgrp" title="Wave labels: arm a wave (keys 1-5), then click the selected curve. Click the armed wave again (or Esc) to disarm."></span>
   <span id="catBtns" class="tgrp lblgrp" title="Response category for the selected curve (keys 6-8)"></span>
   <span class="tgrp" title="Display"><button id="tbAB" class="tog" title="Show A/B splits (off by default)">A/B</button><button id="tbC" class="tog" title="Show contralateral traces">C</button></span>
-  <span class="tgrp" title="Clamp test"><button id="tbClamp" class="tog" title="Clamp the insert tube: no sound reaches the ear, so only stimulus artefact remains (CM and neural responses disappear)">Clamp insert</button></span>
-  <span class="tgrp" title="Arrange curves"><button class="ord" data-ord="O" title="Order by testing order">O</button><button class="ord" data-ord="F" title="Order by frequency (click, then 0.5-4 kHz)">F</button><button class="ord" data-ord="I" title="Order by intensity (highest first)">I</button></span>
   <span class="sp"></span>
   <span id="pageBtns" class="tgrp" title="Recording pages"></span>
   <span id="sessionTxt">Current session</span>
@@ -45,8 +43,7 @@
         <div class="row"><span>Stim.</span>
           <span class="radios"><label><input type="radio" name="ear" value="0" checked> Right</label> <label><input type="radio" name="ear" value="1"> Left</label></span></div>
         <div class="row"><span>Transducer</span><select id="trans"><option value="insert">Insert phone</option><option value="bone">Bone conductor</option></select></div>
-        <label class="row"><span>Insert tube clamped</span><input type="checkbox" id="clampChk"></label>
-        <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
+        <div class="row"><span>Contra masking</span><span><input type="checkbox" id="maskChk" title="Broadband noise to the non-test ear"> <select id="maskLvl"></select> dB SPL</span></div>        <div class="row"><span>Polarity</span><select id="pol"><option value="rare">Rarefaction</option><option value="cond">Condensation</option><option value="alt">Alternating</option></select></div>
         <div class="row"><span>Rate (/s)</span><select id="rate"></select></div>
         <div class="row"><span>Averages</span><select id="nmax"></select></div>
         <div class="row"><span>Reject (&plusmn;&micro;V)</span><select id="reject"><option>10</option><option>20</option><option selected>40</option><option>80</option></select></div>
@@ -62,6 +59,11 @@
       </div>
       <div class="btns"><button id="btnStart" class="big go">Start</button><button id="btnPause" class="big">Pause</button></div>
       <div class="hint">Ipsilateral and contralateral channels are recorded together. Right-click a trace for options.</div>
+      <!-- patient setup (outside the recording software): electrodes and the insert-tube clamp test -->
+      <div class="btns" id="setupBtns">
+        <button id="btnElec" title="Electrode sites and impedances: prep the skin and place / re-apply electrodes">Electrodes &amp; impedances&hellip;</button>
+        <button id="tbClamp" class="tog" title="Clamp the insert tube: no sound reaches the ear, so only stimulus artefact remains (CM and neural responses disappear)">Clamp insert tube</button>
+      </div>
     </div>
 
     <div class="tabpane" id="tab-edit" hidden>
@@ -106,6 +108,7 @@
       <div class="stat">Recorded <b id="recV">0</b></div>
       <div class="stat">Residual noise <b id="rnV">--</b></div>
       <div id="prog"><div id="progFill"></div></div>
+      <button id="zBadge" title="Electrode impedances (click to open)">Z</button>
       <canvas id="eeg" width="220" height="44"></canvas>
     </div>
     <div id="graphs">
@@ -116,6 +119,9 @@
 </div>
 
 <div id="ctx" hidden></div>
+<!-- Electrodes float (non-modal, draggable by its header) -->
+<div id="elecFloat" hidden><div class="fhead" id="elHead"><b>Electrodes</b> <span class="hint">impedance, kΩ (target &lt; 3, pair difference &lt; 1)</span><button id="elClose" title="Close">&times;</button></div>
+  <div id="elBody"></div></div>
 <div id="toast" hidden></div>
 
 <!-- Patient modal -->
@@ -129,6 +135,7 @@
     <label>Age (months) <input id="pMonths" type="number" min="0" max="63" step="1"></label>
     <label>State <select id="pState"><option value="quiet">Quiet, asleep / relaxed</option><option value="noisy">Noisy, awake / restless</option></select></label>
     <label class="admin">EEG noise level <select id="pNoise"><option value="0">0% (none)</option><option value="0.1">10%</option><option value="0.2">20%</option><option value="0.3">30%</option><option value="0.4">40%</option><option value="0.5">50%</option><option value="0.65">65%</option><option value="0.8">80%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+    <label class="admin">Electrodes at start <select id="pElec"><option value="0">On, as found (some need work)</option><option value="1">On, difficult skin</option><option value="2">Not attached (student places them)</option></select></label>
   </div>
   <details id="pAudBox" class="admin"><summary>Hearing thresholds (dB HL)</summary>
   <table id="pAud"><thead><tr><th></th><th>0.5k</th><th>1k</th><th>2k</th><th>4k</th></tr></thead><tbody></tbody></table>

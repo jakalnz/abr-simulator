@@ -104,7 +104,8 @@
                            latI: null, latIII: null, latV: null }, o || {});
   }
   function newPatient(o) {
-    const p = Object.assign({ name: 'New patient', adult: true, ageMonths: 4, noisy: false, noise: 0.3 }, o || {});   // noise = EEG noise multiplier (case setting)
+    // noise = EEG noise multiplier; electrodes = start state 0 on as found, 1 difficult skin, 2 not attached (case settings)
+    const p = Object.assign({ name: 'New patient', adult: true, ageMonths: 4, noisy: false, noise: 0.3, electrodes: 0 }, o || {});
     p.ears = [newEar(o && o.ears && o.ears[0]), newEar(o && o.ears && o.ears[1])];
     return p;
   }
@@ -215,15 +216,29 @@
       const hl = bone ? ear.bc : ear.ac;
       const corr = bone ? ABR_CORR_BC : ABR_CORR_AC;
       const gap = Math.max(0, clickHL(ear.ac) - clickHL(ear.bc));
-      out.push({ level, hl, corr, gap, bone });
+      out.push({ level, hl, corr, gap, bone, em: maskEM(p, stim, c, gap) });
     }
     return out;
+  }
+  /* Contralateral masking: broadband noise (stim.mask, dB SPL, max 85) from an insert in the non-test ear. It raises that
+   * cochlea's ABR threshold to em (dB nHL of the test stimulus); a conductive loss in the masked ear attenuates the noise.
+   * MASK_K is fitted so the BCEHP 2022 masker tables mask the cross-over stimulus with ~10 dB to spare:
+   *   AC (4.11 table, from Stapells 1984, 30 dB IA assumed): masker = (level - 30) + K + 10 for every row;
+   *   BC (4.10 table, infants < 12 mo, Lau & Small 2020, >= 10 dB IA): masker = (level - 10) + K + 10.
+   * The two tables imply very different effective levels for the same noise; each stimulus type follows its own table.
+   * Click BC is not in the table (uses the 2 kHz value). The noise also reaches the test cochlea attenuated by the insert IA
+   * (over-masking, only relevant for high maskers at low test levels). */
+  const MASK_K = { insert: { 0: 5, 500: 15, 1000: 15, 2000: -5, 4000: 10 }, bone: { 0: 35, 500: 55, 1000: 45, 2000: 35, 4000: 35 } };
+  function maskEM(p, stim, c, gap) {
+    if (!stim.mask) return -Infinity;
+    const k = MASK_K[stim.transducer === 'bone' ? 'bone' : 'insert'][stim.freq || 0];
+    return (c === stim.ear ? stim.mask - INTERAURAL_ATT_INSERT : stim.mask - gap) - k;   // test cochlea: noise crosses via bone
   }
 
   /* CF-channel excitation (dB above the ABR threshold at that place) */
   function excitation(inp, stim, ci, ear) {
     const cf = CH_CF[ci];
-    const thr = (stim.freq && !inp.bone) ? thrTone(inp.hl, cf) : thrNHL(inp.hl, inp.corr, cf);
+    const thr = Math.max((stim.freq && !inp.bone) ? thrTone(inp.hl, cf) : thrNHL(inp.hl, inp.corr, cf), inp.em);   // em: masking noise
     let att = 0;
     if (stim.freq) {                       // tone-burst: excitation spreads from the stimulus place
       const oct = Math.log2(cf / stim.freq);
@@ -474,11 +489,49 @@
     }
     return noiseNormCache[key];
   }
-  function noiseBlock(hp, lp, sd, nw) {  // one noise realisation in the displayed window, std ~ sd
+  function noiseBlock(hp, lp, sd, nw, hum) {  // one noise realisation in the displayed window, std ~ sd (+ mains hum, uV)
     const y = crop(filt(rawNoise(NS), hp, lp), nw);
     const k = sd * noiseScale(hp, lp) / DEFAULT_STD;
     for (let i = 0; i < y.length; i++) y[i] *= k;
+    if (hum) {                           // random phase per block, so it averages down like noise but looks like a slow wave
+      const g = humGain(hp, lp), p1 = 2 * Math.PI * Math.random(), p3 = 2 * Math.PI * Math.random();
+      for (let i = 0; i < y.length; i++) {
+        const t = (W0 + i * DT) / 1000;
+        y[i] += hum * (g[0] * Math.sin(2 * Math.PI * HUM_F * t + p1) + HUM_H3 * g[1] * Math.sin(2 * Math.PI * 3 * HUM_F * t + p3));
+      }
+    }
     return y;
+  }
+
+  /* ---------- electrodes: impedance effects on the recording ----------
+   * BCEHP 2022 3.5 / UNHSEIP 5.10: impedance does not change the ABR itself. An impedance difference within a differential
+   * pair degrades the preamplifier CMRR almost proportionally, so more EEG (common-mode) noise gets through - which matters
+   * most when the EEG is already noisy - and more mains / electromagnetic pickup; high but equal impedances mainly add
+   * lead-movement artefact. Targets: every electrode < 3 kOhm, pair difference < 1 kOhm (NZAS adult: < 5, preferably < 3).
+   * imp = {Cz, M1, M2, Gnd} in kOhm (M1 left mastoid, M2 right). Channel for ear e = Cz - mastoid of e. */
+  const HUM_F = 50, HUM_H3 = 0.3;             // NZ mains 50 Hz, plus some 150 Hz
+  // EEG sd x(1 + 0.1 per kOhm difference); hum (uV per kOhm) set so a 5 kOhm difference ~1.7x the click RN, 10 kOhm > 40 nV
+  // (quiet infant, 30% noise, 2000 sweeps); tone bursts (HPF 30 Hz) pass more hum than clicks (100 Hz)
+  const IMP_CMRR = 0.1, IMP_HUM = 0.55;
+  const humGainCache = {};
+  function humGain(hp, lp) {                  // filter amplitude gain at 50 and 150 Hz
+    const key = hp + '|' + lp;
+    if (!humGainCache[key]) {
+      humGainCache[key] = [HUM_F, 3 * HUM_F].map((f) => {
+        const n = 20000, x = new Float64Array(n);
+        for (let i = 0; i < n; i++) x[i] = Math.sin(2 * Math.PI * f * i / FS);
+        const y = filt(x, hp, lp); let s = 0;
+        for (let i = n / 4; i < 3 * n / 4; i++) s += y[i] * y[i];
+        return Math.sqrt(2 * s / (n / 2));
+      });
+    }
+    return humGainCache[key];
+  }
+  function impEffects(imp, recEar) {
+    if (!imp) return { cmrr: 1, hum: 0, move: 1, dz: 0 };
+    const m = recEar === 0 ? imp.M2 : imp.M1, dz = Math.abs(imp.Cz - m), gnd = Math.max(0, imp.Gnd - 3);
+    const mean = (imp.Cz + imp.M1 + imp.M2 + imp.Gnd) / 4;
+    return { cmrr: 1 + IMP_CMRR * dz, hum: IMP_HUM * (dz + 0.15 * gnd), move: 1 + Math.max(0, mean - 3) / 10, dz: dz + 0.15 * gnd };
   }
   const DEFAULT_STD = (() => { let s = 0; const y = crop(filt(rawNoise(NS + 40000), 100, 3000)); for (const v of y) s += v * v; return Math.sqrt(s / y.length); })();
 
@@ -514,7 +567,13 @@
       this.n = 0; this.rejected = 0; this.total = 0; this.wsum = [0, 0];
       this.acc = [0, 1].map(() => [new Float64Array(this.nw), new Float64Array(this.nw)]);   // [channel][half] weighted noise sums
       this.blk = 0;
-      this.pRej = rejectProb(patient, this.opts.reject);
+      // electrodes: channel 0 = ipsilateral (Cz - test-ear mastoid), 1 = contralateral
+      // hum is calibrated at the default 30% noise and scales with the case noise level, so 0% ("none") stays clean
+      const hs = this.opts.noise / 0.3;
+      this.imp = [stim.ear, 1 - stim.ear].map((e) => { const ie = impEffects(this.opts.imp, e); ie.hum *= hs; return ie; });
+      // hum near the reject limit trips the artefact rejection (approximate: from ~6 kOhm imbalance upwards)
+      const dz = Math.max(this.imp[0].dz, this.imp[1].dz), pz = clamp((dz - 6) / 20, 0, 0.8) * 40 / this.opts.reject * Math.min(1, hs);
+      this.pRej = 1 - (1 - rejectProb(patient, this.opts.reject)) * (1 - clamp(pz, 0, 0.9));
     }
     get done() { return this.n >= this.opts.nMax; }
     step(nSweeps) {
@@ -528,10 +587,12 @@
         if (!acc) continue;
         const half = this.blk++ & 1;
         let m = 1 + 0.15 * Math.abs(randn());
-        if (this.p.noisy && Math.random() < 0.12) m *= 1.8 + 2.2 * Math.random();   // myogenic burst
+        const mv = this.imp[0].move;              // high electrode impedances: bigger lead-movement artefacts
+        if ((this.p.noisy && Math.random() < 0.12) || Math.random() < 0.04 * Math.max(0, mv - 1.2)) m *= (1.8 + 2.2 * Math.random()) * mv;   // myogenic / movement burst
         const wt = acc / (m * m);                 // Bayesian: noisier blocks count for less
         for (let ch = 0; ch < 2; ch++) {
-          const nb = noiseBlock(this.opts.hp, this.opts.lp, this.sd1 * m / Math.sqrt(acc), this.nw);
+          const ie = this.imp[ch];
+          const nb = noiseBlock(this.opts.hp, this.opts.lp, this.sd1 * m * ie.cmrr / Math.sqrt(acc), this.nw, ie.hum / Math.sqrt(acc));
           const a = this.acc[ch][half];
           for (let i = 0; i < this.nw; i++) a[i] += nb[i] * wt;
         }
@@ -542,7 +603,10 @@
     /* residual noise (nV) of the combined average */
     get rn() {
       const w = this.wsum[0] + this.wsum[1];
-      return w ? this.sd1 * noiseScale(this.opts.hp, this.opts.lp) * 1000 / Math.sqrt(w) : 0;
+      if (!w) return 0;
+      const ie = this.imp[0], g = humGain(this.opts.hp, this.opts.lp);
+      const sdE = this.sd1 * ie.cmrr * noiseScale(this.opts.hp, this.opts.lp), sdH = ie.hum * Math.hypot(g[0], HUM_H3 * g[1]) / Math.SQRT2;
+      return Math.hypot(sdE, sdH) * 1000 / Math.sqrt(w);
     }
     snapshot() {
       const out = { w1: this.w1, n: this.n, rejected: this.total ? this.rejected / this.total : 0, rn: this.rn, ch: [] };
@@ -656,7 +720,7 @@
   root.ABRModel = {
     FS, DT, W0, W1, NW, W1_TONE, nwFor, FREQS, CH_CF, WAVES, MAX_LEVEL, TARGET, INTERAURAL_ATT_INSERT,
     MORPH_NAMES, newPatient, newEar, simulate, Acquisition, thrNHL, clickThr, clickHL, ABR_CORR_AC, ABR_CORR_BC, ABR_BASE,
-    nominalLatency, toneLatency, OFFSET, normalLI
+    nominalLatency, toneLatency, OFFSET, normalLI, impEffects, MASK_K
   };
   if (typeof module !== 'undefined') module.exports = root.ABRModel;
 })(typeof window !== 'undefined' ? window : globalThis);

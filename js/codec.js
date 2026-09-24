@@ -3,7 +3,8 @@
  */
 (function (root) {
   'use strict';
-  const VERSION = 3;                     // v2 adds the EEG-noise level (v1: 30%); v3 adds per-ear CM type, click morphology and PAM (older: 0)
+  const VERSION = 4;                     // v2 adds the EEG-noise level (v1: 30%); v3 adds per-ear CM type, click morphology and PAM (older: 0);
+                                         // v4 adds the electrode start state (0 on as found, 1 difficult skin, 2 not attached; older: 0)
   const NOISE_LEVELS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 1, 1.5, 2];
 
   class BitWriter {
@@ -36,6 +37,7 @@
       for (const l of [e.latI, e.latIII, e.latV]) { w.write(l == null ? 0 : 1, 1); w.write((l || 0) * 20, 8); }
       w.write(e.ring || 0, 1); w.write(e.morph || 0, 3); w.write(e.pam || 0, 2);
     }
+    w.write(p.electrodes || 0, 2);
     const name = new TextEncoder().encode((p.name || '').slice(0, 60));
     const head = w.bytes();
     const out = new Uint8Array(head.length + 1 + name.length);
@@ -47,7 +49,7 @@
     const bytes = unb64(str);
     const r = new BitReader(bytes);
     const ver = r.read(4);
-    if (ver < 1 || ver > 3) throw new Error('Unsupported case version');
+    if (ver < 1 || ver > 4) throw new Error('Unsupported case version');
     const p = { adult: !!r.read(1), ageMonths: r.read(6), noisy: !!r.read(1), noise: 0.3, ears: [] };
     if (ver >= 2) { const ni = r.read(4); p.noise = NOISE_LEVELS[ni] == null ? 0.3 : NOISE_LEVELS[ni]; }
     for (let i = 0; i < 2; i++) {
@@ -59,6 +61,7 @@
       if (ver >= 3) { e.ring = r.read(1); e.morph = r.read(3); e.pam = r.read(2); } else { e.ring = 0; e.morph = 0; e.pam = 0; }
       p.ears.push(e);
     }
+    p.electrodes = ver >= 4 ? Math.min(2, r.read(2)) : 0;
     const headBytes = Math.ceil(r.pos / 8);
     const len = bytes[headBytes];
     p.name = new TextDecoder().decode(bytes.slice(headBytes + 1, headBytes + 1 + len));

@@ -58,6 +58,30 @@ button.big.stop { background: linear-gradient(#fbe6e6, #e2a6a6); border-color: #
 #prog { flex: 1; min-width: 120px; height: 10px; border: 1px solid #999; background: #eee; }
 #progFill { height: 100%; width: 0; background: #2fa84f; }
 #eeg { background: #fff; border: 1px solid #c8c8c8; }
+#maskLvl { width: 52px; }
+#zBadge { font-weight: 700; padding: 2px 8px; }
+#tab-record { flex: 1; }
+#setupBtns { margin-top: auto; padding-top: 8px; border-top: 1px solid #ccc; }   /* bottom of the Record tab */
+#setupBtns button { flex: 1; padding: 6px 8px; }
+#tbClamp.on { background: #3b78c9; color: #fff; border-color: #1f4f96; }
+#zBadge.ok { background: #e3f3e3; border-color: #5a9a5a; color: #1d6b28; }
+#zBadge.warn { background: #fdf0d5; border-color: #c89a2e; color: #8a5d00; }
+#zBadge.bad { background: #f8dcdc; border-color: #b05454; color: #9b1c1c; }
+/* electrodes float: non-modal, dragged by its header */
+#elecFloat { position: fixed; right: 24px; top: 110px; width: 360px; background: #fff; border: 1px solid #888; box-shadow: 3px 3px 10px #0004; z-index: 15; }
+#elecFloat[hidden] { display: none; }
+#elecFloat .fhead { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; background: linear-gradient(#f7f7f7, #dcdcdc); border-bottom: 1px solid #aaa; cursor: move; }
+#elecFloat .fhead .hint { flex: 1; }
+#elecFloat .fhead button { padding: 0 7px; font-size: 14px; line-height: 18px; }
+#elBody { padding: 8px 10px; }
+#elBody svg { display: block; margin: 0 auto 6px; }
+#elBody table { border-collapse: collapse; width: 100%; }
+#elBody td { padding: 2px 3px; border-bottom: 1px solid #eee; }
+#elBody td.z { font-weight: 700; text-align: right; width: 48px; }
+#elBody td.b { text-align: right; white-space: nowrap; }
+#elBody td.b button { padding: 1px 6px; font-size: 11px; }
+#elBody .pairs { margin-top: 6px; display: flex; gap: 12px; }
+.zok { color: #1d6b28; } .zwarn { color: #a86d00; } .zbad { color: #b01c1c; } .zoff { color: #888; }
 #graphs { display: flex; gap: 6px; flex: 1; min-height: 300px; }
 .pane { flex: 1; display: flex; flex-direction: column; background: #fff; border: 1px solid #c8c8c8; min-width: 0; }
 .ptitle { padding: 2px 8px; font-weight: 600; border-bottom: 1px solid #ddd; }
@@ -91,7 +115,8 @@ table.lat th, #reportBody th { background: #eee; }
 #pPath label { display: flex; flex-direction: column; font-size: 11px; }
 #reportBody .rep-head { display: flex; justify-content: space-between; border-bottom: 2px solid #333; margin-bottom: 8px; }
 #reportBody .rep-graphs { display: flex; gap: 8px; } #reportBody .rep-graphs > div { width: 50%; border: 1px solid #aaa; }
-#reportBody .rep-graphs canvas { width: 100%; display: block; }
+#reportBody .rep-graphs canvas, #reportBody .rep-graphs img { width: 100%; height: auto; display: block; }
+#reportBody .li-charts img.chart { width: 100%; height: auto; display: block; border: 1px solid #ccc; }
 #reportBody .li-charts { grid-template-columns: 1fr 1fr; }
 #reportBody .li-charts canvas { height: 300px; }
 #reportBody table.log td { font-size: 11px; } #reportBody table.log td.l { text-align: left; }
@@ -103,7 +128,7 @@ table.lat th, #reportBody th { background: #eee; }
   #mReport { position: static; display: block; overflow: visible; padding: 0; background: #fff; }
   #mReport .mbox { width: auto; border: 0; padding: 0; background: #fff; }
   .noprint { display: none !important; }
-  .rep-graphs, .li-charts canvas, #reportBody tr { break-inside: avoid; }
+  .rep-graphs, .li-charts canvas, .li-charts img, #reportBody tr { break-inside: avoid; }
   #reportBody h3 { break-after: avoid; }
   #reportBody table { font-size: 10px; }
 }
