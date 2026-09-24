@@ -42,9 +42,9 @@
   function logEv(msg) { S.log.push({ t: new Date(), page: S.page + 1, msg }); }
   const stimText = (s) => `${s.ear ? 'Left' : 'Right'} ${typeLabel(s.freq)} ${s.level} dB nHL, ${s.transducer === 'bone' ? 'bone' : 'insert'}${s.clamped ? ' (clamped)' : ''}, ${POL_NAME[s.polarity]} ${s.rate}/s`;
   // 'add': merged / added curves of different polarities (no single polarity to show)
-  const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C', add: 'Added' };
+  const POL_NAME = { rare: 'Raref.', cond: 'Cond.', alt: 'Alter.', sub: 'R − C', add: 'Sum' };
   const POL_SHORT = { rare: 'R', cond: 'C', alt: 'A', sub: 'R−C', add: '+' };
-  const POL_TAG = { rare: 'rar.', cond: 'con.', alt: 'alt.', sub: 'R−C', add: 'added' };
+  const POL_TAG = { rare: 'rar.', cond: 'con.', alt: 'alt.', sub: 'R−C', add: 'sum' };
 
   /* ---------- settings <-> UI ---------- */
   function applyProtocolDefaults() {
