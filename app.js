@@ -385,10 +385,37 @@
     return { html: '<div class="li-charts">' + gs.map((g, i) => `<canvas id="${prefix}${i}"></canvas>`).join('') + '</div>', gs };
   }
   function openPop(title, html, after) {
-    $('popTitle').textContent = title; $('popBody').innerHTML = html; $('mPop').hidden = false;
+    $('popTitle').textContent = title; $('popBody').innerHTML = html; $('mPop').hidden = false; $('popCopy').hidden = true;
     if (after) requestAnimationFrame(after);
   }
-  function openLatAll() { openPop('Latencies (ms) — page ' + (S.page + 1), latTableHTML(markedRows())); }
+  function openLatAll() {
+    const rows = markedRows();
+    openPop('Latencies (ms) — page ' + (S.page + 1), latTableHTML(rows));
+    $('popCopy').hidden = !rows.length;
+  }
+  /* tab-separated latency table (pastes into Excel as cells); includes stimulus details and interpeak intervals */
+  function latTableTSV(rows) {
+    const head = ['Curve', 'Ear', 'Stimulus', 'Transducer', 'dB nHL', 'Rate', 'Polarity', ...WAVES, 'I-III', 'III-V', 'I-V', 'Category'];
+    const lines = [head.join('\t')];
+    for (const t of rows) {
+      const m = t.marks;
+      lines.push([t.label, EAR[t.ear], typeLabel(t.stim.freq), t.stim.transducer === 'bone' ? 'Bone' : 'Insert', t.stim.level, t.stim.rate, POL_NAME[t.stim.polarity],
+        ...WAVES.map((w) => f2(m[w])), dif(m.I, m.III), dif(m.III, m.V), dif(m.I, m.V), t.cat || ''].join('\t'));
+    }
+    return lines.join('\r\n');
+  }
+  function copyLatTable() {
+    const txt = latTableTSV(markedRows());
+    const done = () => toast('Latency table copied — paste into Excel');
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done));
+    else fallbackCopy(txt, done);
+  }
+  function fallbackCopy(txt, done) {             // file:// pages have no async clipboard: copy via a hidden textarea
+    const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed: select the table and press Ctrl+C'); }
+    ta.remove();
+  }
   function openLI() {
     const { html, gs } = liChartsHTML('li');
     openPop('Latency–intensity — page ' + (S.page + 1), html, () => gs.forEach((g, i) => drawLI($('li' + i), g)));
@@ -781,7 +808,7 @@
     [0, 1].forEach((e) => { bindDrag($('cv' + e), e); });
     [0, 1].forEach((e) => { const cv = $('cv' + e); cv.onclick = (ev) => onClick(cv, e, ev); cv.oncontextmenu = (ev) => onContext(cv, e, ev); });
     document.addEventListener('click', () => ($('ctx').hidden = true));
-    $('btnLatAll').onclick = openLatAll; $('btnLI').onclick = openLI; $('popClose').onclick = () => ($('mPop').hidden = true);
+    $('btnLatAll').onclick = openLatAll; $('btnLI').onclick = openLI; $('popClose').onclick = () => ($('mPop').hidden = true); $('popCopy').onclick = copyLatTable;
     $('btnReport').onclick = openReport; $('rClose').onclick = () => ($('mReport').hidden = true); $('rPrint').onclick = () => window.print();
     window.addEventListener('resize', render);
     bindPatient();
